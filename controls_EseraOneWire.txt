@@ -1,0 +1,4 @@
+UPD 1970-01-01_01:00:00  FHEM/66_EseraOneWire.pm
+UPD 1970-01-01_01:00:00  FHEM/66_EseraDigitalInOut.pm
+UPD 1970-01-01_01:00:00  FHEM/66_EseraMulti.pm
+UPD 1970-01-01_01:00:00  FHEM/66_EseraTemp.pm
