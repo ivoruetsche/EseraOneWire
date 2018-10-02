@@ -18,7 +18,7 @@ foreach $filename (@filenames)
   my @statOutput = stat($prefix."/".$filename);
 
   my $mtime = $statOutput[9];
-  my $date = POSIX::strftime("%Y-%d-%m", localtime($mtime));
+  my $date = POSIX::strftime("%Y-%m-%d", localtime($mtime));
   my $time = POSIX::strftime("%H:%M:%S", localtime($mtime));
   my $filetime = $date."_".$time;
 
