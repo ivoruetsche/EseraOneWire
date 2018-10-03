@@ -311,31 +311,16 @@ EseraOneWire_refreshControllerInfo($)
   EseraOneWire_taskListAddSimple($hash, "get,sys,kalrec", "1_KALREC", \&EseraOneWire_query_response_handler);
   EseraOneWire_taskListAddSimple($hash, "get,sys,kalrectime", "1_KALRECTIME", \&EseraOneWire_query_response_handler);
   
-  # TODO issue in controller software: string mismatch between command and response, ask Esera
-  # 2018.09.23 15:28:48 1: EseraOneWire (owc) - COMM sending: get,sys,dataprint
-  # 2018.09.23 15:28:48 1: EseraOneWire (owc) - COMM Read: 1_DATASEND|1
-  # 2018.09.23 15:28:48 1: EseraOneWire (owc) - COMM expected response received: 1_DATASEND|1
+  # string mismatch between command and response, according to Esera this might be fixed in a later firmware
   EseraOneWire_taskListAddSimple($hash, "get,sys,dataprint", "1_DATASEND", \&EseraOneWire_DATAPRINT_handler);
   
   EseraOneWire_taskListAddSimple($hash, "get,sys,datatime", "1_DATATIME", \&EseraOneWire_query_response_handler);
   EseraOneWire_taskListAddSimple($hash, "get,sys,kalsend", "1_KALSEND", \&EseraOneWire_query_response_handler);
   EseraOneWire_taskListAddSimple($hash, "get,sys,kalsendtime", "1_KALSENDTIME", \&EseraOneWire_query_response_handler);
   EseraOneWire_taskListAddSimple($hash, "get,owb,owdid", "1_OWDID", \&EseraOneWire_query_response_handler);
-  
-  # TODO The "data" query does not work, ask Esera.
-  # 2018.09.23 15:32:42 1: EseraOneWire (owc) - COMM sending: get,owb,data
-  # 2018.09.23 15:32:42 1: EseraOneWire (owc) - COMM Read: 1_INF|18:13:59
-  # 2018.09.23 15:32:42 1: EseraOneWire (owc) - COMM Read: 1_ERR|3
-  # 2018.09.23 15:32:42 1: EseraOneWire (owc) - COMM error response received, expected: 1_DATA
-  # 2018.09.23 15:32:42 1: EseraOneWire (owc) - error response, command: get,owb,data , response: 1_ERR|3 , ignoring the response
-  #EseraOneWire_taskListAddSimple($hash, "get,owb,data", "1_DATA", \&EseraOneWire_query_response_handler);
-
   EseraOneWire_taskListAddSimple($hash, "get,owb,owdidformat", "1_OWDIDFORMAT", \&EseraOneWire_query_response_handler);
   
-  # TODO issue in controller software: string mismatch between command and response, ask Esera.
-  # 2018.09.23 15:32:43 1: EseraOneWire (owc) - COMM sending: get,owb,search
-  # 2018.09.23 15:32:43 1: EseraOneWire (owc) - COMM Read: 1_SEARCHMODE|2
-  # 2018.09.23 15:32:43 1: EseraOneWire (owc) - COMM expected response received: 1_SEARCHMODE|2
+  # string mismatch between command and response, according to Esera this might be fixed in a later firmware
   EseraOneWire_taskListAddSimple($hash, "get,owb,search", "1_SEARCHMODE", \&EseraOneWire_SEARCH_handler);
   
   EseraOneWire_taskListAddSimple($hash, "get,owb,searchtime", "1_SEARCHTIME", \&EseraOneWire_query_response_handler);
@@ -382,8 +367,7 @@ EseraOneWire_refreshStatus($)
   
   # clear old information
   undef $hash->{DEVICE_STATUS} unless (!defined $hash->{DEVICE_STATUS});
-  # TODO Fix error count query.
-  #undef $hash->{DEVICE_ERRORS} unless (!defined $hash->{DEVICE_ERRORS});
+  undef $hash->{DEVICE_ERRORS} unless (!defined $hash->{DEVICE_ERRORS});
       
   # iterate over known devices  
   my %eseraIds = %$eseraIdsRef;
@@ -394,11 +378,11 @@ EseraOneWire_refreshStatus($)
 
     # query the status         
     EseraOneWire_taskListAdd($hash, "get,owd,status,".$eseraId, 
-    "1_OWD_", \&EseraOneWire_DEVICE_STATUS_handler, "ERR", \&EseraOneWire_error_handler, \&EseraOneWire_unexpected_handler, 0);
+      "1_OWD_", \&EseraOneWire_DEVICE_STATUS_handler, "ERR", \&EseraOneWire_error_handler, \&EseraOneWire_unexpected_handler, 0);
 
-    # TODO The "errowd" query does not work yet. "get,owd,errowd,1" returns "1_2:04:171_ERR|3". Report to ESERA.
-    # query number of device communication errors
-#    EseraOneWire_taskListAddSimple($hash, "get,owd,errowd,".$eseraId, "1_ERROWD", \&EseraOneWire_ERROWD_handler);
+    # sample response: "1_ERROWD2|0"
+    EseraOneWire_taskListAddSimple($hash, "get,owb,errowd,".$eseraId, 
+      "1_ERROWD", \&EseraOneWire_ERROWD_handler);
   } 
 }
 
@@ -655,11 +639,22 @@ EseraOneWire_getStatus($)
     return $message;
   }
   
+  # get access to stored device errors
+  my $deviceErrorsRef = $hash->{DEVICE_ERRORS};
+  if (!defined $deviceErrorsRef)
+  {
+    EseraOneWire_refreshStatus($hash);
+    my $message = "No error information found. Triggering refresh. Please try again.";
+    Log3 $name, 3, "EseraOneWire ($name) - ".$message;
+    return $message;
+  }
+  
   # iterate over detected devices  
   my $list = "";
   my %eseraIds = %$eseraIdsRef;
   my %deviceTypes = %$deviceTypesRef;
   my %deviceStatus = %$deviceStatusRef;
+  my %deviceErrors = %$deviceErrorsRef;
   my @keys = keys %eseraIds;
   foreach (@keys)
   {
@@ -674,7 +669,7 @@ EseraOneWire_getStatus($)
     {
       $list .= $status;
     }
-    
+    $list .= ",".$deviceErrors{$_};
     $list .= ";\n";
   } 
 
@@ -1270,6 +1265,54 @@ EseraOneWire_DEVICE_STATUS_handler($$)
   }
 }
 
+sub 
+EseraOneWire_ERROWD_handler($$)
+{
+  my ($hash, $response) = @_;
+  my $name = $hash->{NAME};
+  $response =~ s/;//g;
+  my @fields = split(/\|/, $response);  
+  if (scalar(@fields) != 2)
+  {
+    Log3 $name, 1, "EseraOneWire ($name) - error: unexpected number of response fields for ERROWD query";
+  }
+  my $owdId;
+  my $status;
+  if ($fields[0] =~ m/1_ERROWD(\d+)/)
+  {
+    my $eseraId = $1;
+    my $oneWireId = EseraOneWire_eseraIdToOneWireId($hash, $eseraId);
+    
+    if (!defined $oneWireId)
+    {
+      Log3 $name, 1, "EseraOneWire ($name) - error: could not map ESERA ID to 1-wire ID: ".$eseraId;
+      return;
+    }
+    
+    my $errorCount = $fields[1];
+
+    if (defined $hash->{DEVICE_ERRORS})
+    {
+      # list is not empty; get it and add new entry
+      my $deviceErrorsRef = $hash->{DEVICE_ERRORS};
+      my %deviceErrors = %$deviceErrorsRef;
+      $deviceErrors{$oneWireId} = $errorCount;
+      $hash->{DEVICE_ERRORS} = \%deviceErrors;
+    }
+    else
+    {
+      # list is empty; create new list and store in hash
+      my %deviceErrors;
+      $deviceErrors{$oneWireId} = $errorCount;
+      $hash->{DEVICE_ERRORS} = \%deviceErrors;
+    }
+  }
+  else
+  {
+    Log3 $name, 1, "EseraOneWire ($name) - error: could not extract OWD ID";
+  }
+}
+
 sub
 EseraOneWire_clientArtHandler($$)
 {
@@ -1600,7 +1643,6 @@ EseraOneWire_taskListHandleResponse($$)
 ################################################################################
 1;
 ################################################################################
-################################################################################
 
 =pod
 =item device
@@ -1695,7 +1737,7 @@ EseraOneWire_taskListHandleResponse($$)
       <b><code>get &lt;name&gt; status</code><br></b>
       Reports currently known status of all connected 1-wire devices. <br>
       The format of each list entry is<br>
-      <code>&lt;oneWireId&gt;,&lt;eseraId&gt;,&lt;deviceType&gt;,&lt;status&gt;;</code><br>
+      <code>&lt;oneWireId&gt;,&lt;eseraId&gt;,&lt;deviceType&gt;,&lt;status&gt;,&lt;errors&gt;;</code><br>
       New status information is retrieved from the known devices when<br>
       <i>get status</i> is called. New data can then be printed with<br>
       the following call of <i>get status</i>. It is implemented like<br>
