@@ -94,6 +94,7 @@ habe mein Problem daher mit einer Neu-Implementierung gelöst. Da das Protokoll 
 und da einem der Controller die meiste Arbeit abnimmt, war die Implementierung gar nicht so aufwändig. Im Normalbetrieb 
 schickt einem der Controller in regelmäßigen Abständen Werte aller gefundenen Sensoren. Die Digital- und Analogausgänge 
 der gefundenen 1-wire Devices werden über einfache Befehle gesetzt. Fertig.
+[Nachtrag: Der OWX Owner sieht eine Möglichkeit, den Esera Controller einzubinden, siehe Forum-Eintrag. Das ist noch zu prüfen.]
 * Bislang kann ich sagen, dass der Support von Esera gut funktioniert. Obwohl ich "nur" eine Privatperson und 
 ein FHEM Bastler bin, wurden meine Anfragen bislang immer zügig beantwortet.
 * Kosten: Ich finde die Preise OK für das was man bekommt. Die Alternativen, die ich gefunden habe, waren nicht
