@@ -201,35 +201,29 @@ EseraOneWire_baseSettings($)
 
   # Sending this request as a dummy, because the first access seems to get an 1_ERR always, followed
   # by the correct response. Wait time of 3s between "set,sys,rst,1" and "set,sys,dataprint,1" does not help.
-  # TODO ask Esera
   EseraOneWire_taskListAddSync($hash, "set,sys,dataprint,1", "1_DATAPRINT", \&EseraOneWire_query_response_handler);
 
   # commands below here are expected to receive a "good" response
-  
-  # ensure the controller number 1 is used always
-  EseraOneWire_taskListAddSimple($hash, "set,sys,contno,1", "1_CONTNO", \&EseraOneWire_query_response_handler);
-  # ensure the controller is active and will send events
-  EseraOneWire_taskListAddSimple($hash, "set,sys,run,1", "1_RUN", \&EseraOneWire_query_response_handler);
+
+  # ensure factory default settings
+  # This command does not clear the list of devices, only the settings. If you want to clear the list
+  # as well use "set,sys,facreset,1" with expected response "1_FACRESET|1".
+  EseraOneWire_taskListAddSimple($hash, "set,sys,loaddefault,1", "1_LOADDEFAULT", \&EseraOneWire_query_response_handler);
+
+  # wait some time, 0.2s works -> adding some safety buffer
+  EseraOneWire_taskListAddPostedWrite($hash, "", 0.4);
+
   # events must contain the 1-wire ID, not the ESERA ID
   EseraOneWire_taskListAddSimple($hash, "set,owb,owdid,1", "1_OWDID", \&EseraOneWire_query_response_handler);
-  EseraOneWire_taskListAddSimple($hash, "set,sys,dataprint,1", "1_DATAPRINT", \&EseraOneWire_DATAPRINT_handler);
+  
+  # more explicit default settings...
   EseraOneWire_taskListAddSimple($hash, "set,sys,datatime,10", "1_DATATIME", \&EseraOneWire_query_response_handler);
-  EseraOneWire_taskListAddSimple($hash, "set,sys,echo,1", "1_ECHO", \&EseraOneWire_query_response_handler);
   EseraOneWire_taskListAddSimple($hash, "set,sys,kalsend,1", "1_KALSEND", \&EseraOneWire_query_response_handler);
   EseraOneWire_taskListAddSimple($hash, "set,sys,kalsendtime,180", "1_KALSENDTIME", \&EseraOneWire_query_response_handler);
   EseraOneWire_taskListAddSimple($hash, "set,sys,kalrec,0", "1_KALREC", \&EseraOneWire_query_response_handler);
-  EseraOneWire_taskListAddSimple($hash, "set,owb,owdidformat,1", "1_OWDIDFORMAT", \&EseraOneWire_query_response_handler);
   EseraOneWire_taskListAddSimple($hash, "set,owb,search,2", "1_SEARCH", \&EseraOneWire_query_response_handler);
   EseraOneWire_taskListAddSimple($hash, "set,owb,searchtime,30", "1_SEARCHTIME", \&EseraOneWire_query_response_handler);
-  
-  # TODO "data" setting does not work. Ask Esera.
-  # 2018.09.23 15:17:51 1: EseraOneWire (owc) - COMM sending: set,owb,data,2
-  # 2018.09.23 15:17:51 1: EseraOneWire (owc) - COMM Read: 1_INF|17:59:07
-  # 2018.09.23 15:17:51 1: EseraOneWire (owc) - COMM Read: 1_ERR|3
-  #EseraOneWire_taskListAddSimple($hash, "set,owb,data,2", "1_DATA", \&EseraOneWire_query_response_handler);
-  
   EseraOneWire_taskListAddSimple($hash, "set,owb,polltime,5", "1_POLLTIME", \&EseraOneWire_query_response_handler);
-  EseraOneWire_taskListAddSimple($hash, "set,owd,ds2408inv,1", "1_DS2408INV", \&EseraOneWire_query_response_handler);#
 
   # wait some time to give the controller time to detect the devices
   EseraOneWire_taskListAddPostedWrite($hash, "", 4);

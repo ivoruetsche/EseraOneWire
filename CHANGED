@@ -1,3 +1,3 @@
 EseraOneWire last changes:
-2018-10-02
- - playing with FHEM update
+2018-10-16
+ - ensure default settings with set,sys,loaddefault,1 command
