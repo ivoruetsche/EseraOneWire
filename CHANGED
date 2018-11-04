@@ -1,3 +1,6 @@
 EseraOneWire last changes:
 2018-10-16
  - ensure default settings with set,sys,loaddefault,1 command
+2018-11-04
+ - use SetExtensions with 66_EseraDigitalInOut
+ - fixes for running multiple controllers at the same time

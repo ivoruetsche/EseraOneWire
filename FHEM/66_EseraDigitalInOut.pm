@@ -93,14 +93,15 @@ EseraDigitalInOut_Define($$)
   my ($hash, $def) = @_;
   my @a = split( "[ \t][ \t]*", $def);
   
-  return "Usage: define <name> EseraDigitalInOut <1-wire-ID> <deviceType> (<bitPos>|-) (<bitCount>|-)" if(@a < 6);
+  return "Usage: define <name> EseraDigitalInOut <physicalDevice> <1-wire-ID> <deviceType> (<bitPos>|-) (<bitCount>|-)" if(@a < 7);
 
   my $devName = $a[0];
   my $type = $a[1];
-  my $oneWireId = $a[2];
-  my $deviceType = uc($a[3]);
-  my $bitPos = $a[4];
-  my $bitCount = $a[5];
+  my $physicalDevice = $a[2];
+  my $oneWireId = $a[3];
+  my $deviceType = uc($a[4]);
+  my $bitPos = $a[5];
+  my $bitCount = $a[6];
   
   $hash->{STATE} = 'Initialized';
   $hash->{NAME} = $devName;
@@ -118,20 +119,7 @@ EseraDigitalInOut_Define($$)
   
   $modules{EseraDigitalInOut}{defptr}{$oneWireId} = $hash;
   
-  my $ioDev = undef;
-  my @parts = split("_", $devName);
-  if (@parts == 3) 
-  {
-    $ioDev = $parts[1];
-  }
-  if($ioDev) 
-  {
-    AssignIoPort($hash, $ioDev);
-  }
-  else 
-  {
-    AssignIoPort($hash);
-  }
+  AssignIoPort($hash, $physicalDevice);
   
   if (defined($hash->{IODev}->{NAME})) 
   {
@@ -367,9 +355,9 @@ EseraDigitalInOut_Set($$)
   }
   else
   {
-    my $message = "unknown argument $what, choose one of $commands";
-    Log3 $name, 1, "EseraDigitalInOut ($name) - ".$message;
-    return $message;
+    shift @parameters;
+    shift @parameters;
+    return SetExtensions($hash, $commands, $name, $what, @parameters);
   }
   return undef;
 }
@@ -494,9 +482,9 @@ EseraDigitalInOut_Parse($$)
         my $ioDev = $h->{IODev}->{NAME};
         my $def = $h->{DEF};
 
-        # $def has the whole definition, extract the oneWireId (which is expected as first parameter)
+        # $def has the whole definition, extract the oneWireId (which is expected as 2nd parameter)
         my @parts = split(/ /, $def);
-	my $oneWireIdFromDef = $parts[0];
+	my $oneWireIdFromDef = $parts[1];
 	
         if (($ioDev eq $ioName) && ($oneWireIdFromDef eq $oneWireId)) 
 	{
@@ -514,7 +502,7 @@ EseraDigitalInOut_Parse($$)
   }
   elsif ($deviceType eq "DS2408")
   {
-    return "UNDEFINED EseraDigitalInOut_".$ioName."_".$oneWireId." EseraDigitalInOut ".$oneWireId." ".$deviceType." - -";
+    return "UNDEFINED EseraDigitalInOut_".$ioName."_".$oneWireId." EseraDigitalInOut ".$ioName." ".$oneWireId." ".$deviceType." - -";
   }
   
   return undef;
@@ -545,7 +533,7 @@ EseraDigitalInOut_Attr(@)
   <a name="EseraDigitalInOut_Define"></a>
   <b>Define</b>
   <ul>
-    <code>define &lt;name&gt; EseraDigitalInOut &lt;oneWireId&gt; &lt;deviceType&gt; &lt;bitPos&gt; &lt;bitCount&gt;</code><br>
+    <code>define &lt;name&gt; EseraDigitalInOut &lt;ioDevice&gt; &lt;oneWireId&gt; &lt;deviceType&gt; &lt;bitPos&gt; &lt;bitCount&gt;</code><br>
     &lt;oneWireId&gt; specifies the 1-wire ID of the digital input/output chip.<br>
     Use the "get devices" query of EseraOneWire to get a list of 1-wire IDs, <br>
     or simply rely on autocreate.<br>

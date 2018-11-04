@@ -45,12 +45,13 @@ EseraTemp_Define($$)
   my ($hash, $def) = @_;
   my @a = split( "[ \t][ \t]*", $def);
   
-  return "Usage: define <name> EseraTemp <1-wire-ID>" if(@a < 4);
+  return "Usage: define <name> EseraTemp <physicalDevice> <1-wire-ID> <deviceType>" if(@a < 5);
 
   my $devName = $a[0];
   my $type = $a[1];
-  my $oneWireId = $a[2];
-  my $deviceType = uc($a[3]);
+  my $physicalDevice = $a[2];
+  my $oneWireId = $a[3];
+  my $deviceType = uc($a[4]);
 
   $hash->{STATE} = 'Initialized';
   $hash->{NAME} = $devName;
@@ -61,20 +62,7 @@ EseraTemp_Define($$)
  
   $modules{EseraTemp}{defptr}{$oneWireId} = $hash;
   
-  my $ioDev = undef;
-  my @parts = split("_", $devName);
-  if (@parts == 3) 
-  {
-    $ioDev = $parts[1];
-  }
-  if($ioDev) 
-  {
-    AssignIoPort($hash, $ioDev);
-  }
-  else 
-  {
-    AssignIoPort($hash);
-  }
+  AssignIoPort($hash, $physicalDevice);
   
   if (defined($hash->{IODev}->{NAME})) 
   {
@@ -169,9 +157,9 @@ EseraTemp_Parse($$)
         my $ioDev = $h->{IODev}->{NAME};
         my $def = $h->{DEF};
 
-        # $def has the whole definition, extract the oneWireId (which is expected as first parameter)
+        # $def has the whole definition, extract the oneWireId (which is expected as 2nd parameter)
         my @parts = split(/ /, $def);
-	my $oneWireIdFromDef = $parts[0];
+	my $oneWireIdFromDef = $parts[1];
 
         if (($ioDev eq $ioName) && ($oneWireIdFromDef eq $oneWireId)) 
 	{
@@ -215,7 +203,7 @@ EseraTemp_Parse($$)
   }
   elsif ($deviceType eq "DS1820")
   {
-    return "UNDEFINED EseraTemp_".$ioName."_".$oneWireId." EseraTemp ".$oneWireId." ".$deviceType;
+    return "UNDEFINED EseraTemp_".$ioName."_".$oneWireId." EseraTemp ".$ioName." ".$oneWireId." ".$deviceType;
   }
   
   return undef;
@@ -244,7 +232,7 @@ EseraTemp_Attr(@)
   <a name="EseraTemp_Define"></a>
   <b>Define</b>
   <ul>
-    <code>define &lt;name&gt; EseraTemp &lt;oneWireId&gt; &lt;deviceType&gt;</code> <br>
+    <code>define &lt;name&gt; EseraTemp &lt;ioDevice&gt; &lt;oneWireId&gt; &lt;deviceType&gt;</code> <br>
     &lt;oneWireId&gt; specifies the 1-wire ID of the sensor. Use the "get devices"<br>
     query of EseraOneWire to get a list of 1-wire IDs, or simply rely on autocreate.<br>
     Supported values for deviceType: DS1820<br>

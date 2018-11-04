@@ -369,7 +369,7 @@ sub
 EseraOneWire_oneWireIdToEseraId($$)
 {
   my ($hash, $oneWireId) = @_;
-  my $name = $hash->{NAME};  
+  my $name = $hash->{NAME};
   my $eseraIdsRef = $hash->{ESERA_IDS};
   if (defined $eseraIdsRef)
   {
@@ -379,6 +379,14 @@ EseraOneWire_oneWireIdToEseraId($$)
     {
       return $eseraId;
     }
+    else
+    {
+      Log3 $name, 4, "EseraOneWire ($name) - EseraOneWire_oneWireIdToEseraId, not found, ".$oneWireId;
+    }
+  }
+  else
+  {
+    Log3 $name, 4, "EseraOneWire ($name) - EseraOneWire_oneWireIdToEseraId, hash does not exist";
   }
   return undef;
 }
@@ -1353,7 +1361,7 @@ EseraOneWire_taskListStartNext($)
   my $waitTime = $task[6];
   
   # if a command is specified: send it to the controller
-  if (defined $command)
+  if ($command)
   {
     Log3 $name, 4, "EseraOneWire ($name) - COMM sending: $command"; 
     DevIo_SimpleWrite($hash, $command."\r", 2);
