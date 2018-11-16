@@ -15,9 +15,9 @@ FHEM commands:
 
 # Getting started
 1. Complete the installation as described above.
+1. Recommended: Connect at least one 1-wire sensor or actor to the controller.
 1. Power your Esera 1-wire controller and connect it to LAN. Remember the IP address.
-1. Not required but helpful: Connect at least one 1-wire sensor or actor to the controller.
-1. On FHEM command line: "define *yourDeviceName* EseraOnewire *yourIpAddress*"
+1. On FHEM command line: "define *yourDeviceName* EseraOneWire *yourIpAddress*"
 1. Give FHEM a couple of seconds to initialize the controller.
 1. Refresh the FHEM web UI to see devices auto-created for your 1-wire actors/sensors.
 1. Your EseraOneWire devices are ready to be used: Check the readings, try the queries
