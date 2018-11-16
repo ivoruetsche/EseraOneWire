@@ -4,20 +4,14 @@
 #
 # Copyright pizmus 2018
 #
-# This FHEM module controls the Esera "1-wire Controller 1" with LAN interface.
-# It works together with client modules 66_EseraTemp, 66_EseraDigitalInOut and
-# 66_EseraMulti.
+# This FHEM module controls the Esera "1-wire Controller 1" and the 
+# "1-wire Controller 2" with LAN interface.
+# It works together with the following client modules:
+#  66_EseraAnalogInOut
+#  66_EseraDigitalInOut
+#  66_EseraMulti
+#  66_EseraTemp
 #
-# The module is tested with:
-# - Esera "1-Wire Controller 1" (product number 11319, FW: 11903 SERIAL: 1131918V1.2-587)
-# - Esera "Digital Out 8-Channel" (product number 11229) with DS2408
-# - Esera "8-Channel Digital Input DC" (product number 11216) with DS2408
-# - Esera Multisensor (product number 11134) with DS2438 and DS1820
-# - DS1820
-# - DS2408
-# - DS2438
-# - Raspberry Pi as FHEM host
-# 
 ################################################################################
 #
 # Data stored in device hash:
@@ -37,23 +31,14 @@
 #   can be validated easily.
 # - Let the user control certain settings, like DATATIME, SEACHTIME and wait time
 #   used after posted writes, e.g. as parameters to the define command.
-# - Implement recovery when controller disappears (power-on) and comes back.
-#   This is potentially broken, at least not tested thoroughly.
-# - Provide a way to reset (close followed by open) the DevIo connection to the
-#   controller.
 # - Implement an incremental update of the device list: Avoid removing the list
 #   when re-building it. Instead, update individual entries as needed, but keep
 #   a valid list at all times. This will avoid unnecessary error messages in the
 #   log file.
-# - Generate warning if Firmware is too old.
-# - Test with multiple controllers.
+# - Generate warning/error if firmware version does not match.
 # - Implement support for all devices listed in the Programmierhandbuch.
-# - Read error counts as part of status query.
-# - Provide an interface so that clients can query the device status.
 # - Implement a kind of watchdog based on the KAL message received from the controller.
 #   Reset the connection and/or the controller if the message is not received on time.
-# - Performance optimizations, e.g.
-#   - make use of command FIFO inside the controller, depth 10
 #
 ################################################################################
 
@@ -80,10 +65,12 @@ EseraOneWire_Initialize($)
   $hash->{AttrFn} = "EseraOneWire_Attr";
   $hash->{AttrList} = $readingFnAttributes;
   
-  $hash->{Clients} = ":EseraDigitalInOut:EseraTemp:EseraMulti:";
+  $hash->{Clients} = ":EseraDigitalInOut:EseraTemp:EseraMulti:EseraAnalogInOut:EseraIButton:";
   $hash->{MatchList} = { "1:EseraDigitalInOut" => ".*", 
                          "2:EseraTemp" => ".*",
-                         "2:EseraMulti" => ".*" };
+                         "3:EseraMulti" => ".*" ,
+                         "4:EseraAnalogInOut" => ".*",
+                         "5:EseraIButton" => ".*"};
 }
 
 sub 
@@ -197,11 +184,13 @@ EseraOneWire_baseSettings($)
   undef $hash->{TASK_LIST} unless (!defined $hash->{TASK_LIST});
 
   # reset controller and wait for 1_RDY. Ignore "garbage" before 1_RDY.
-  EseraOneWire_taskListAddSync($hash, "set,sys,rst,1", "1_RDY", \&EseraOneWire_query_response_handler);
+  EseraOneWire_taskListAddSync($hash, "set,sys,rst,1", "1_CONT", \&EseraOneWire_query_response_handler);
 
   # Sending this request as a dummy, because the first access seems to get an 1_ERR always, followed
   # by the correct response. Wait time of 3s between "set,sys,rst,1" and "set,sys,dataprint,1" does not help.
-  EseraOneWire_taskListAddSync($hash, "set,sys,dataprint,1", "1_DATAPRINT", \&EseraOneWire_query_response_handler);
+#  EseraOneWire_taskListAddSync($hash, "set,sys,dataprint,1", "1_DATAPRINT", \&EseraOneWire_query_response_handler);
+
+  EseraOneWire_taskListAddPostedWrite($hash, undef, 5.0);
 
   # commands below here are expected to receive a "good" response
 
@@ -216,6 +205,9 @@ EseraOneWire_baseSettings($)
   # events must contain the 1-wire ID, not the ESERA ID
   EseraOneWire_taskListAddSimple($hash, "set,owb,owdid,1", "1_OWDID", \&EseraOneWire_query_response_handler);
   
+  # get iButton events for connect and disconnect
+  EseraOneWire_taskListAddSimple($hash, "set,key,data,2", "1_DATA", \&EseraOneWire_query_response_handler);
+    
   # more explicit default settings...
   EseraOneWire_taskListAddSimple($hash, "set,sys,datatime,10", "1_DATATIME", \&EseraOneWire_query_response_handler);
   EseraOneWire_taskListAddSimple($hash, "set,sys,kalsend,1", "1_KALSEND", \&EseraOneWire_query_response_handler);
@@ -283,6 +275,11 @@ EseraOneWire_refreshControllerInfo($)
   EseraOneWire_taskListAddSimple($hash, "get,owb,searchtime", "1_SEARCHTIME", \&EseraOneWire_query_response_handler);
   EseraOneWire_taskListAddSimple($hash, "get,owb,polltime", "1_POLLTIME", \&EseraOneWire_query_response_handler);
   EseraOneWire_taskListAddSimple($hash, "get,owd,ds2408inv", "1_DS2408INV", \&EseraOneWire_query_response_handler);
+  
+  EseraOneWire_taskListAddSimple($hash, "get,key,data", "1_DATA", \&EseraOneWire_query_response_handler);
+  
+  # TODO This query does not work.
+  #EseraOneWire_taskListAddSimple($hash, "get,key,fast", "1_FAST", \&EseraOneWire_query_response_handler);
   
   # TODO This does not work. The command is documented like this but it causes an 
   # ERR response. What does the last parameter mean anyway? Ask Esera.
@@ -543,6 +540,8 @@ EseraOneWire_getSettings($)
   my $searchTime = $hash->{".SEARCHTIME"};
   my $polltime = $hash->{".POLLTIME"};
   my $ds2408inv = $hash->{".DS2408INV"};
+  my $data = $hash->{".DATA"};
+  my $fast = $hash->{".FAST"};
   
   $run = "UNKNOWN" if (!defined $run);
   $contno = "UNKNOWN" if (!defined $contno);
@@ -558,6 +557,8 @@ EseraOneWire_getSettings($)
   $searchTime = "UNKNOWN" if (!defined $searchTime);
   $polltime = "UNKNOWN" if (!defined $polltime);
   $ds2408inv = "UNKNOWN" if (!defined $ds2408inv);
+  $data = "UNKNOWN" if (!defined $data);
+  $fast = "UNKNOWN" if (!defined $fast);
 
   $list .= "RUN: ".$run." (1=controller sending to FHEM)\n";
   $list .= "CONTNO: ".$contno." (ESERA controller number)\n";
@@ -573,6 +574,10 @@ EseraOneWire_getSettings($)
   $list .= "SEARCHTIME: ".$searchTime." (time period in seconds used to search for new devices)\n";
   $list .= "POLLTIME: ".$polltime." (time period in seconds used with periodic reads from devices)\n";
   $list .= "DS2408INV: ".$ds2408inv." (1=invert readings from DS2408 devices)\n"; 
+  $list .= "DATA: ".$data." (2=get events for iButton connect and disconnect)\n"; 
+  
+  # TODO FAST is UNKNOWN, WHY?
+  #$list .= "FAST: ".$fast." (1=fast polling is enabled, requires special license)\n"; 
   
   return $list;
 }
@@ -777,7 +782,18 @@ EseraOneWire_Read($)
       {
         Log3 $name, 5, "EseraOneWire ($name) - readings ignored because controller is not initialized (2)";
       }
-    }    
+    } 
+    elsif ($ascii =~ m/^1_SYS(\d+)/)
+    {
+      if ($hash->{".CONTROLLER_INITIALIZED"})
+      {
+        EseraOneWire_parseReadingsInSingleLine($hash, $ascii);
+      }
+      else
+      {
+        Log3 $name, 5, "EseraOneWire ($name) - readings ignored because controller is not initialized (2)";
+      }
+    }        
     else
     {
       # everything else is considered a response to latest command
@@ -971,7 +987,7 @@ EseraOneWire_parseReadings($$$$$)
   {
     Log3 $name, 1, "EseraOneWire ($name) - error: unexpected number of fields for reading";
   }
- 
+
   my $eseraIdsRef = $hash->{ESERA_IDS};
   my $deviceTypesRef = $hash->{DEVICE_TYPES};
   if (!defined $eseraIdsRef || !defined $deviceTypesRef)
@@ -999,6 +1015,25 @@ EseraOneWire_parseReadings($$$$$)
   return undef;
 }
 
+sub 
+EseraOneWire_parseSysReadings($$$$$)
+{
+  my ($hash, $fieldsCount, $owId, $readingId, $value) = @_;
+  my $name = $hash->{NAME};
+  if ($fieldsCount != 2)
+  {
+    Log3 $name, 1, "EseraOneWire ($name) - error: unexpected number of fields for reading";
+  }
+ 
+  my $deviceType = $owId;
+  my $eseraId = $owId;
+  my $message = $deviceType."_".$owId."_".$eseraId."_".$readingId."_".$value;
+  Log3 $name, 4, "EseraOneWire ($name) - passing reading to clients: ".$message;
+  Dispatch($hash, $message, "");
+  
+  return undef;
+}
+
 # TODO rename to parseReading, and let it work on a single reading only. Multiple readings in same line are not expected anymore.
 sub 
 EseraOneWire_parseReadingsInSingleLine($$)
@@ -1018,20 +1053,20 @@ EseraOneWire_parseReadingsInSingleLine($$)
     my $numberOfFields = scalar(@fields);
     if ($numberOfFields == 2)
     {
-      if ($fields[0] =~ m/1_([0-9A-F]+)_(\d+)/)  
+      if ($fields[0] =~ m/^1_([0-9A-F]+)_([0-9]+)$/)
       {
         my $owId = $1;
         my $readingId = $2;
         my $value = $fields[1];
-	
+
         EseraOneWire_parseReadings($hash, 2, $owId, $readingId, $value);
       }
-      elsif ($fields[0] =~ m/1_([0-9A-F]+)/)  
+      elsif ($fields[0] =~ m/^1_([0-9A-F]+)$/)
       {
         my $owId = $1;
         my $readingId = 0;
         my $value = $fields[1];
-	
+
         EseraOneWire_parseReadings($hash, 2, $owId, $readingId, $value);
       }
       elsif ($fields[0] =~ m/1_([0-9:]+)_(\d+)/)   # TODO still needed after controller update?
@@ -1041,6 +1076,22 @@ EseraOneWire_parseReadingsInSingleLine($$)
         my $value = $fields[1];
 	
         EseraOneWire_parseReadings($hash, 2, $owId, $readingId, $value);
+      }
+      elsif ($fields[0] =~ m/^1_SYS(\d)_(\d)/)
+      {
+        my $owId = "SYS".$1;
+        my $readingId = $2;
+        my $value = $fields[1];
+
+        EseraOneWire_parseSysReadings($hash, 2, $owId, $readingId, $value);
+      }
+      elsif ($fields[0] =~ m/^1_SYS3/)
+      {
+        my $owId = "SYS3";
+        my $readingId = 0;
+        my $value = $fields[1];
+
+        EseraOneWire_parseSysReadings($hash, 2, $owId, $readingId, $value);
       }
       else
       {
@@ -1621,10 +1672,10 @@ EseraOneWire_taskListHandleResponse($$)
 <ul>
   This module provides an interface to Esera 1-wire controllers.<br>
   The module works together with 66_Esera* modules which support <br>
-  various 1-wire devices. See these modulesfor more information <br>
+  various 1-wire devices. See these modules for more information <br>
   about supported 1-wire devices. The module supports autocreate. <br>
   <br>
-  Tested with: Esera "1-Wire Controller 1" (product number 11319, firmware version 11903)<br>
+  Tested with Esera controller firmware version 11903.<br>
   <br>
   
   <a name="EseraOneWire_Define"></a>

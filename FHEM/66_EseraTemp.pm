@@ -8,13 +8,11 @@
 # an Esera "1-wire Controller 1" with LAN interface and the 66_EseraOneWire 
 # module.
 #
-# supported device types: DS1820
-#
 ################################################################################
 #
 # Known issues and potential enhancements:
 #
-# - support ESERA product numbers of ESERA temperature sensors
+# - ...
 #
 ################################################################################
 
@@ -72,7 +70,7 @@ EseraTemp_Define($$)
   {
     Log3 $devName, 1, "$devName: no I/O device";
   }
-    
+  
   return undef;
 }
 
@@ -97,31 +95,6 @@ EseraTemp_Get($@)
 sub 
 EseraTemp_Set($$) 
 {
-  my ( $hash, @parameters ) = @_;
-  my $name = $parameters[0];
-  my $what = lc($parameters[1]);
- 
-  my $oneWireId = $hash->{ONEWIREID};
-  my $iodev = $hash->{IODev}->{NAME};
-  
-  my $commands = ("statusRequest");
-  
-  if ($what eq "statusRequest")
-  {
-    IOWrite($hash, "status;$oneWireId");
-  }
-  elsif ($what eq "?")
-  {
-    # TODO use the :noArg info 
-    my $message = "unknown argument $what, choose one of $commands";
-    return $message;
-  }
-  else
-  {
-    my $message = "unknown argument $what, choose one of $commands";
-    Log3 $name, 1, "EseraTemp ($name) - ".$message;
-    return $message;
-  }
   return undef;
 }
 
@@ -193,7 +166,7 @@ EseraTemp_Parse($$)
     }
     else
     {
-      my $nameOfReading = $oneWireId."_temperature";
+      my $nameOfReading = "temperature";
       readingsSingleUpdate($rhash, $nameOfReading, $value / 100.0, 1);
     }
            
@@ -235,7 +208,11 @@ EseraTemp_Attr(@)
     <code>define &lt;name&gt; EseraTemp &lt;ioDevice&gt; &lt;oneWireId&gt; &lt;deviceType&gt;</code> <br>
     &lt;oneWireId&gt; specifies the 1-wire ID of the sensor. Use the "get devices"<br>
     query of EseraOneWire to get a list of 1-wire IDs, or simply rely on autocreate.<br>
-    Supported values for deviceType: DS1820<br>
+    Supported values for deviceType:<br>
+    <ul>
+      <li>DS1820</li>
+    </ul>
+    Note: Esera 11131 temperature sensor is a DS1820.
   </ul>
   <br>
   
@@ -263,7 +240,7 @@ EseraTemp_Attr(@)
   <a name="EseraTemp_Readings"></a>
   <b>Readings</b>
   <ul>
-    <li>&lt;oneWireId&gt;_temperature &ndash; temperature in degrees Celsius</li>
+    <li>temperature &ndash; temperature in degrees Celsius</li>
   </ul>
   <br>
 

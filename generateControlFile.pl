@@ -5,6 +5,7 @@ use POSIX qw(strftime);
 use strict;
 
 my @filenames = ( "66_EseraOneWire.pm",
+                  "66_EseraAnalogInOut.pm",
                   "66_EseraDigitalInOut.pm",
                   "66_EseraMulti.pm",
 		  "66_EseraTemp.pm");

@@ -5,10 +5,13 @@
 # Copyright pizmus 2018
 #
 # This FHEM module supports an Esera multi sensor connected via
-# an Esera "1-wire Controller 1" with LAN interface and the 66_EseraOneWire 
-# module.
+# an Esera 1-wire Controller and the 66_EseraOneWire module.
 #
-# supported device types: DS2438, 11134 (Esera multi sensor)
+################################################################################
+#
+# Known issues and potential enhancements:
+#
+# - ...
 #
 ################################################################################
 
@@ -101,31 +104,6 @@ EseraMulti_Get($@)
 sub 
 EseraMulti_Set($$) 
 {
-  my ( $hash, @parameters ) = @_;
-  my $name = $parameters[0];
-  my $what = lc($parameters[1]);
- 
-  my $oneWireId = $hash->{ONEWIREID};
-  my $iodev = $hash->{IODev}->{NAME};
-  
-  my $commands = ("statusRequest");
-  
-  if ($what eq "statusRequest")
-  {
-    IOWrite($hash, "status;$oneWireId");
-  }
-  elsif ($what eq "?")
-  {
-    # TODO use the :noArg info 
-    my $message = "unknown argument $what, choose one of $commands";
-    return $message;
-  }
-  else
-  {
-    my $message = "unknown argument $what, choose one of $commands";
-    Log3 $name, 1, "EseraMulti ($name) - ".$message;
-    return $message;
-  }
   return undef;
 }
 
@@ -208,55 +186,55 @@ EseraMulti_Parse($$)
     }
     else
     {
-      my $nameOfReading = $oneWireId."_";
+      my $nameOfReading;
       if ($deviceType eq "DS2438")
       {
         if ($readingId == 1) 
         {
-          $nameOfReading .= "temperature";
+          $nameOfReading = "temperature";
           readingsSingleUpdate($rhash, $nameOfReading, $value / 100.0, 1);
         }
         elsif ($readingId == 2) 
         {
-          $nameOfReading .= "VCC";
+          $nameOfReading = "VCC";
           readingsSingleUpdate($rhash, $nameOfReading, $value / 100.0, 1);
         }
         elsif ($readingId == 3) 
         {
-          $nameOfReading .= "VAD";
+          $nameOfReading = "VAD";
           readingsSingleUpdate($rhash, $nameOfReading, $value / 100.0, 1);
         }
         elsif ($readingId == 4) 
         {
-          $nameOfReading .= "VSense";
+          $nameOfReading = "VSense";
           readingsSingleUpdate($rhash, $nameOfReading, $value / 100000.0, 1);
         }
       }
-      elsif ($deviceType eq "11134")
+      elsif (($deviceType eq "11132") || ($deviceType eq "11134"))
       {
         if ($readingId == 1) 
         {
-          $nameOfReading .= "temperature";
+          $nameOfReading = "temperature";
           readingsSingleUpdate($rhash, $nameOfReading, $value / 100.0, 1);
         }
         elsif ($readingId == 2) 
         {
-          $nameOfReading .= "voltage";
+          $nameOfReading = "voltage";
           readingsSingleUpdate($rhash, $nameOfReading, $value / 100.0, 1);
         }
         elsif ($readingId == 3) 
         {
-          $nameOfReading .= "humidity";
+          $nameOfReading = "humidity";
           readingsSingleUpdate($rhash, $nameOfReading, $value / 100.0, 1);
         }
         elsif ($readingId == 4) 
         {
-          $nameOfReading .= "dewpoint";
+          $nameOfReading = "dewpoint";
           readingsSingleUpdate($rhash, $nameOfReading, $value / 100.0, 1);
         }
         elsif ($readingId == 5) 
         {
-          $nameOfReading .= "brightness";
+          $nameOfReading = "brightness";
           readingsSingleUpdate($rhash, $nameOfReading, $value / 100.0, 1);
         }
       }      
@@ -266,7 +244,7 @@ EseraMulti_Parse($$)
     push(@list, $rname);
     return @list;
   }
-  elsif ($deviceType eq "DS2438")
+  elsif (($deviceType eq "DS2438") || ($deviceType eq "11132") || ($deviceType eq "11134"))
   {
     return "UNDEFINED EseraMulti_".$ioName."_".$oneWireId." EseraMulti ".$ioName." ".$oneWireId." ".$deviceType;
   }
@@ -302,12 +280,13 @@ EseraMulti_Attr(@)
     query of EseraOneWire to get a list of 1-wire IDs, or simply rely on autocreate. <br>
     Supported values for deviceType: 
     <ul>
-      <li>11134 (Esera product number)</li>
-      <li>DS2438 (1-wire chip used by 11134)</li>
+      <li>DS2438</li>
+      <li>11132 (Esera product number, multi sensor Unterputz)</li>
+      <li>11134 (Esera product number, multi sensor Aufputz)</li>
     </ul>
     With deviceType DS2438 this device generates readings with un-interpreted data<br>
     from DS2438. This can be used with any DS2438 device, independent of an Esera <br>
-    product. With deviceType 11134 this module provides interpreted readings like <br>
+    product. With deviceType 11132/11134 this module provides interpreted readings like <br>
     humidity or dew point.<br>
   </ul>
   
@@ -337,18 +316,18 @@ EseraMulti_Attr(@)
   <ul>
     readings for DS2438:<br>
     <ul>
-      <li>&lt;oneWireId&gt;_VAD</li>
-      <li>&lt;oneWireId&gt;_VCC</li>
-      <li>&lt;oneWireId&gt;_VSense</li>
-      <li>&lt;oneWireId&gt;_temperature</li>
+      <li>VAD</li>
+      <li>VCC</li>
+      <li>VSense</li>
+      <li>temperature</li>
     </ul>
-    readings for Esera 11134:<br>
+    readings for Esera 11132/11134:<br>
     <ul>
-      <li>&lt;oneWireId&gt;_temperature</li>
-      <li>&lt;oneWireId&gt;_humidity</li>
-      <li>&lt;oneWireId&gt;_dewpoint</li>
-      <li>&lt;oneWireId&gt;_brightness</li>
-      <li>&lt;oneWireId&gt;_voltage</li>
+      <li>temperature</li>
+      <li>humidity</li>
+      <li>dewpoint</li>
+      <li>brightness</li>
+      <li>voltage</li>
     </ul>
   </ul>
   <br>

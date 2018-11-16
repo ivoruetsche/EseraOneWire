@@ -8,9 +8,6 @@
 # an Esera "1-wire Controller 1" with LAN interface and the 66_EseraOneWire 
 # module.
 #
-# supported device types: DS2408, 11229 (Esera "Digital Out 8-Channel"), 
-# 11216 (Esera "8-Channel Digital Input DC")
-#
 ################################################################################
 #
 # Known issues and potential enhancements:
@@ -25,7 +22,7 @@ use strict;
 use warnings;
 use SetExtensions;
 
-my %deviceSpecs = ("DS2408" => 8, "11229" => 8, "11216" => 8);
+my %deviceSpecs = ("DS2408" => 8, "11229" => 8, "11216" => 8, "SYS1" => 4, "SYS2" => 5);
 
 sub 
 EseraDigitalInOut_Initialize($) 
@@ -136,7 +133,7 @@ EseraDigitalInOut_Define($$)
     # for the DS* devices types the "DS" has to be omitted
     IOWrite($hash, "assign;$oneWireId;$1");
   }
-  else
+  elsif (!($deviceType =~ m/^SYS[12]/))
   {
     IOWrite($hash, "assign;$oneWireId;$deviceType");
   }
@@ -227,6 +224,71 @@ EseraDigitalInOut_setDS2408digout($$$$)
   return undef;
 }
 
+sub 
+EseraDigitalInOut_setSysDigout($$$$)
+{
+  my ($hash, $owId, $mask, $value) = @_;
+  my $name = $hash->{NAME};
+  
+  if ($mask < 1)
+  {
+    my $message = "error: at least one mask bit must be set, mask ".$mask.", value ".$value;
+    Log3 $name, 1, "EseraDigitalInOut ($name) - ".$message;
+    return $message;    
+  }
+  
+  if ($mask > 31) 
+  {
+    my $message = "error: mask is out of range";
+    Log3 $name, 1, "EseraDigitalInOut ($name) - ".$message;
+    return $message;    
+  }
+  
+  if (($value < 0) || ($value > 31))
+  {
+    my $message = "error: value out of range";
+    Log3 $name, 1, "EseraDigitalInOut ($name) - ".$message;
+    return $message;    
+  }
+  
+  # look up the ESERA ID
+  my $eseraId = $hash->{ESERAID};
+  if (!defined $eseraId)
+  {
+    my $message = "error: ESERA ID not known";
+    Log3 $name, 1, "EseraDigitalInOut ($name) - ".$message;
+    return $message;    
+  }
+
+  # set values as given by mask and value
+  if ($mask == 31)
+  {
+    # all bits are selected, use command to set all bits
+    my $command = "set,sys,outh,".$value;
+    IOWrite($hash, "set;$owId;$command");
+    return undef;
+  }
+  else
+  {
+    # a subset of bits is selected, iterate over selected bits
+    my $i;
+    for ($i=0; $i<8; $i++)
+    {
+      if ($mask & 0x1)
+      {
+        my $bitValue = $value & 0x1;
+        my $command = "set,sys,out,".($i+1).",".$bitValue;
+        IOWrite($hash, "set;$owId;$command");
+      }
+      $mask = $mask >> 1;
+      $value = $value >> 1;
+    }
+    return undef;
+  }
+   
+  return undef;
+}
+
 sub
 EseraDigitalInOut_calculateBitMasksForSet($$$)
 {
@@ -256,14 +318,22 @@ EseraDigitalInOut_setOutput($$$$)
     return $message;        
   } 
   
-  if (($hash->{DEVICE_TYPE} eq "DS2408") | ($hash->{DEVICE_TYPE} eq "11229"))
+  if (($hash->{DEVICE_TYPE} eq "DS2408") || 
+      ($hash->{DEVICE_TYPE} eq "11229"))
   {
     my ($adjustedMask, $adjustedValue) = EseraDigitalInOut_calculateBitMasksForSet($hash, $mask, $value);
     
     Log3 $name, 5, "EseraDigitalInOut ($name) - EseraDigitalInOut_setOutput DS2408 adjustedMask: $adjustedMask, adjustedValue: $adjustedValue";
     EseraDigitalInOut_setDS2408digout($hash, $oneWireId, $adjustedMask, $adjustedValue);
   }
-  elsif ($hash->{DEVICE_TYPE} eq "11216")
+  elsif ($hash->{DEVICE_TYPE} eq "SYS2")
+  {
+    my ($adjustedMask, $adjustedValue) = EseraDigitalInOut_calculateBitMasksForSet($hash, $mask, $value);
+    
+    Log3 $name, 5, "EseraDigitalInOut ($name) - EseraDigitalInOut_setOutput SYS2 adjustedMask: $adjustedMask, adjustedValue: $adjustedValue";
+    EseraDigitalInOut_setSysDigout($hash, $oneWireId, $adjustedMask, $adjustedValue);
+  }
+  elsif (($hash->{DEVICE_TYPE} eq "11216") || ($hash->{DEVICE_TYPE} eq "SYS1"))
   {
     Log3 $name, 1, "EseraDigitalInOut ($name) - error: trying to set digital output but this device only has inputs";
   }
@@ -305,7 +375,7 @@ EseraDigitalInOut_Set($$)
   my $oneWireId = $hash->{ONEWIREID};
   my $iodev = $hash->{IODev}->{NAME};
   
-  my $commands = ("on off digout statusRequest");
+  my $commands = ("on off out");
   
   #return $commands if ( $cmd eq '?' || $cmd eq '');
 
@@ -343,10 +413,6 @@ EseraDigitalInOut_Set($$)
     }
     EseraDigitalInOut_setOutput($hash, $oneWireId, 0xFFFFFFFF, 0x00000000);
     $hash->{LAST_OUT} = 0;
-  }
-  elsif ($what eq "statusRequest")
-  {
-    IOWrite($hash, "status;$oneWireId");
   }
   elsif ($what eq "?")
   {
@@ -394,7 +460,7 @@ EseraDigitalInOut_ParseForOneDevice($$$$$$)
       # for the DS* devices types the "DS" has to be omitted
       IOWrite($rhash, "assign;$oneWireId;$1");
     }
-    else
+    elsif (!($deviceType =~ m/^SYS[12]/))
     {
       IOWrite($rhash, "assign;$oneWireId;".$rhash->{DEVICE_TYPE});
     }
@@ -410,18 +476,18 @@ EseraDigitalInOut_ParseForOneDevice($$$$$$)
   }
   else
   { 
-    my $nameOfReading = $oneWireId."_";
+    my $nameOfReading;
     if ($deviceType eq "DS2408")
     {
       if ($readingId == 2)
       {
-        $nameOfReading .= "DIGIN";
+        $nameOfReading = "in";
         my $readingValue = EseraDigitalInOut_getReadingValue($value, $rhash->{BITPOS}, $rhash->{BITCOUNT});
         readingsSingleUpdate($rhash, $nameOfReading, $readingValue, 1);
       } 
       elsif ($readingId == 4)
       {
-        $nameOfReading .= "DIGOUT";
+        $nameOfReading = "out";
         my $readingValue = EseraDigitalInOut_getReadingValue($value, $rhash->{BITPOS}, $rhash->{BITCOUNT});
         readingsSingleUpdate($rhash, $nameOfReading, $readingValue, 1);
       }
@@ -430,7 +496,7 @@ EseraDigitalInOut_ParseForOneDevice($$$$$$)
     {
       if ($readingId == 4)
       {
-        $nameOfReading .= "DIGOUT";
+        $nameOfReading = "out";
         my $readingValue = EseraDigitalInOut_getReadingValue($value, $rhash->{BITPOS}, $rhash->{BITCOUNT});
         readingsSingleUpdate($rhash, $nameOfReading, $readingValue, 1);
       }
@@ -439,7 +505,25 @@ EseraDigitalInOut_ParseForOneDevice($$$$$$)
     {
       if ($readingId == 2)
       {
-        $nameOfReading .= "DIGIN";
+        $nameOfReading = "in";
+        my $readingValue = EseraDigitalInOut_getReadingValue($value, $rhash->{BITPOS}, $rhash->{BITCOUNT});
+        readingsSingleUpdate($rhash, $nameOfReading, $readingValue, 1);
+      }
+    }
+    elsif ($deviceType eq "SYS2")  # Controller 2 digital output
+    {
+      if ($readingId == 2)
+      {
+        $nameOfReading = "out";
+        my $readingValue = EseraDigitalInOut_getReadingValue($value, $rhash->{BITPOS}, $rhash->{BITCOUNT});
+        readingsSingleUpdate($rhash, $nameOfReading, $readingValue, 1);
+      }
+    }      
+    elsif ($deviceType eq "SYS1")  # Controller 2 digital input
+    {
+      if ($readingId == 2)
+      {
+        $nameOfReading = "in";
         my $readingValue = EseraDigitalInOut_getReadingValue($value, $rhash->{BITPOS}, $rhash->{BITCOUNT});
         readingsSingleUpdate($rhash, $nameOfReading, $readingValue, 1);
       }
@@ -500,7 +584,7 @@ EseraDigitalInOut_Parse($$)
   {
     return @list;
   }
-  elsif ($deviceType eq "DS2408")
+  elsif (($deviceType eq "DS2408") or ($deviceType eq "SYS1") or ($deviceType eq "SYS2"))
   {
     return "UNDEFINED EseraDigitalInOut_".$ioName."_".$oneWireId." EseraDigitalInOut ".$ioName." ".$oneWireId." ".$deviceType." - -";
   }
@@ -542,6 +626,8 @@ EseraDigitalInOut_Attr(@)
       <li>DS2408</li>
       <li>11229 (Esera "Digital Out 8-Channel")</li> 
       <li>11216 (Esera "8-Channel Digital Input DC")</li>
+      <li>SYS1 (Esera Controller 2, digital input, not listed by "get devices")</li>
+      <li>SYS2 (Esera Controller 2, digital output, not listed by "get devices")</li>
     </ul>
     The bitPos and bitCount parameters is used to specify a subset of bits only. <br>
     For example, the DS2408 has 8 inputs, and you can define a EseraDigitalInOut <br>
@@ -559,10 +645,10 @@ EseraDigitalInOut_Attr(@)
   <b>Set</b>
   <ul>
     <li>
-      <b><code>set &lt;name&gt; digout &lt;bitMask&gt; &lt;bitValue&gt;</code><br></b>
+      <b><code>set &lt;name&gt; out &lt;bitMask&gt; &lt;bitValue&gt;</code><br></b>
       Controls digital outputs. The bitMask selects bits that are programmed, <br>
       and bitValue specifies the new value.<br>
-      Examples: <code>set myEseraDigitalInOut digout 0xf 0x3</code><br>
+      Examples: <code>set myEseraDigitalInOut out 0xf 0x3</code><br>
       In this example the four lower outputs are selected by the mask, <br>
       and they get the new value 0x3 = 0b0011.<br>
       bitMask and bitValue can be specified as hex number (0x...), binary<br>
@@ -599,8 +685,8 @@ EseraDigitalInOut_Attr(@)
   <a name="EseraDigitalInOut_Readings"></a>
   <b>Readings</b>
   <ul>
-    <li>&lt;oneWireId&gt;_DIGIN &ndash; digital input state</li>
-    <li>&lt;oneWireId&gt;_DIGOUT &ndash; digital output state</li>
+    <li>in &ndash; digital input state</li>
+    <li>out &ndash; digital output state</li>
   </ul>
   <br>
 
