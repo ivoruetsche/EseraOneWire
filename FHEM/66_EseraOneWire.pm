@@ -11,6 +11,7 @@
 #  66_EseraDigitalInOut
 #  66_EseraMulti
 #  66_EseraTemp
+#  66_EseraCount
 #
 ################################################################################
 #
@@ -61,12 +62,13 @@ EseraOneWire_Initialize($)
   $hash->{AttrFn} = "EseraOneWire_Attr";
   $hash->{AttrList} = $readingFnAttributes;
   
-  $hash->{Clients} = ":EseraDigitalInOut:EseraTemp:EseraMulti:EseraAnalogInOut:EseraIButton:";
+  $hash->{Clients} = ":EseraDigitalInOut:EseraTemp:EseraMulti:EseraAnalogInOut:EseraIButton:EseraCount:";
   $hash->{MatchList} = { "1:EseraDigitalInOut" => ".*", 
                          "2:EseraTemp" => ".*",
                          "3:EseraMulti" => ".*" ,
                          "4:EseraAnalogInOut" => ".*",
-                         "5:EseraIButton" => ".*"};
+                         "5:EseraIButton" => ".*",
+			 "6:EseraCount" => ".*"};
 }
 
 sub 

@@ -14,4 +14,5 @@ EseraOneWire last changes:
  - more tolerant reset sequence of 66_EseraOneWire
  - incremental update of device list in 66_EseraOneWire
  - bug fix for "set out" of 66_EseraDigitalInOut
- 
+2019-02-07
+ - experimental support for DS2423

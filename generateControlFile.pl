@@ -8,7 +8,8 @@ my @filenames = ( "66_EseraOneWire.pm",
                   "66_EseraAnalogInOut.pm",
                   "66_EseraDigitalInOut.pm",
                   "66_EseraMulti.pm",
-		  "66_EseraTemp.pm");
+		  "66_EseraTemp.pm",
+		  "66_EseraCount.pm");
 
 my $prefix = "FHEM";
 my $filename = "";
