@@ -31,10 +31,6 @@
 #   can be validated easily.
 # - Let the user control certain settings, like DATATIME, SEACHTIME and wait time
 #   used after posted writes, e.g. as parameters to the define command.
-# - Implement an incremental update of the device list: Avoid removing the list
-#   when re-building it. Instead, update individual entries as needed, but keep
-#   a valid list at all times. This will avoid unnecessary error messages in the
-#   log file.
 # - Generate warning/error if firmware version does not match.
 # - Implement support for all devices listed in the Programmierhandbuch.
 # - Implement a kind of watchdog based on the KAL message received from the controller.
@@ -183,14 +179,12 @@ EseraOneWire_baseSettings($)
   # clear task list before reset  
   undef $hash->{TASK_LIST} unless (!defined $hash->{TASK_LIST});
 
-  # reset controller and wait for 1_RDY. Ignore "garbage" before 1_RDY.
-  EseraOneWire_taskListAddSync($hash, "set,sys,rst,1", "1_CONT", \&EseraOneWire_query_response_handler);
-
+  # send reset command (posted)
+  EseraOneWire_taskListAddPostedWrite($hash, "set,sys,rst,1", 5.0);
+  
   # Sending this request as a dummy, because the first access seems to get an 1_ERR always, followed
   # by the correct response. Wait time of 3s between "set,sys,rst,1" and "set,sys,dataprint,1" does not help.
-#  EseraOneWire_taskListAddSync($hash, "set,sys,dataprint,1", "1_DATAPRINT", \&EseraOneWire_query_response_handler);
-
-  EseraOneWire_taskListAddPostedWrite($hash, undef, 5.0);
+  EseraOneWire_taskListAddSync($hash, "set,sys,dataprint,1", "1_DATAPRINT", \&EseraOneWire_query_response_handler);
 
   # commands below here are expected to receive a "good" response
 
@@ -228,6 +222,52 @@ EseraOneWire_baseSettings($)
 
   # This must be the last one.
   EseraOneWire_taskListAddSimple($hash, "get,sys,run", "1_RUN", \&EseraOneWire_init_complete_handler);
+}
+
+sub
+EseraOneWire_removeDeviceTypeFromList($$)
+{
+  my ($hash, $oneWireId) = @_;
+  my $name = $hash->{NAME};
+  
+  if (defined $hash->{DEVICE_TYPES})
+  {
+    # list is not empty; get it and delete entry
+    my $deviceTypesRef = $hash->{DEVICE_TYPES};
+    my %deviceTypes = %$deviceTypesRef;
+    if (defined $deviceTypes{$oneWireId})
+    {
+      delete($deviceTypes{$oneWireId});
+    }
+    $hash->{DEVICE_TYPES} = \%deviceTypes;
+  }
+}
+
+# incremental update of device list
+sub
+EseraOneWire_updateDeviceList($)
+{
+  my ($hash) = @_;
+  my $name = $hash->{NAME};
+
+  # do nothing if a refresh is already in process
+  return undef if ((defined $hash->{".READ_PENDING"}) && ($hash->{".READ_PENDING"} == 1));
+  
+  Log3 $name, 4, "EseraOneWire ($name) - info: reading device list from controller";
+
+  # do not clear old device information
+  
+  # Enqueue a query to retrieve the device list.
+  # The LST0 query gets multiple responses, depending on the number of devices known by the controller.
+  # Read the list with a posted write. The wait time has to chosen so that all LST responses are received
+  # before the next command is sent. LST responses are handled generically in the EseraOneWire_Read().
+  EseraOneWire_taskListAddPostedWrite($hash, "get,owb,list0", 2);
+  
+  # This must be the last one.
+  EseraOneWire_taskListAddSimple($hash, "get,sys,run", "1_RUN", \&EseraOneWire_read_complete_handler);
+  $hash->{".READ_PENDING"} = 1;
+
+  return undef;
 }
 
 sub
@@ -479,16 +519,37 @@ EseraOneWire_getDevices($)
   my $eseraIdsRef = $hash->{ESERA_IDS};
   my $deviceTypesRef = $hash->{DEVICE_TYPES};
   my $list = "";
+  my $isEmpty = 1;
   if (defined $eseraIdsRef && defined $deviceTypesRef)
   {
     my %eseraIds = %$eseraIdsRef;
     my %deviceTypes = %$deviceTypesRef;
     my @keys = keys %eseraIds;
+    my $updateNeeded = 0;
     foreach (@keys)
     {
-      $list .= $_.",".$eseraIds{$_}.",".$deviceTypes{$_}.";\n";
-    } 
+      $isEmpty = 0;
+      if (defined $deviceTypes{$_})
+      {
+        $list .= $_.",".$eseraIds{$_}.",".$deviceTypes{$_}.";\n";
+      }
+      else
+      {
+        $list .= $_.",".$eseraIds{$_}.",pending;\n";
+	$updateNeeded = 1;
+      }
+    }
+    if ($updateNeeded)
+    {
+      EseraOneWire_updateDeviceList($hash);
+    }
   }
+  
+  if ($isEmpty)
+  {
+    $list .= "device list is empty\n";
+  }
+  
   return $list;
 }
 
@@ -628,7 +689,15 @@ EseraOneWire_getStatus($)
   my @keys = keys %eseraIds;
   foreach (@keys)
   {
-    $list .= $_.",".$eseraIds{$_}.",".$deviceTypes{$_}.",";
+    if (defined $deviceTypes{$_})
+    {
+      $list .= $_.",".$eseraIds{$_}.",".$deviceTypes{$_}.",";
+    }
+    else
+    {
+      $list .= $_.",".$eseraIds{$_}.",pending,";
+      EseraOneWire_updateDeviceList($hash);
+    }
     
     my $status = $deviceStatus{$_};
     if (!defined $status)
@@ -938,20 +1007,21 @@ EseraOneWire_Write($$)
     my $eseraId = EseraOneWire_oneWireIdToEseraId($hash, $oneWireId);
     if (!defined $eseraId)
     {
-      Log3 $name, 1, "EseraOneWire ($name) - error looking up eseraId for assign request";
+      Log3 $name, 1, "EseraOneWire ($name) - error looking up eseraId for assign request, oneWireId $oneWireId";
       return undef;
     }
     
     my $productNumber = $fields[2];    
     my $command = "set,owd,art,".$eseraId.",".$productNumber;
     
-    Log3 $name, 1, "EseraOneWire ($name) - assign: $oneWireId $productNumber $command";
+    Log3 $name, 4, "EseraOneWire ($name) - info: assigning product number $productNumber to $oneWireId";
     
     EseraOneWire_taskListAdd($hash, $command, "1_ART", \&EseraOneWire_clientArtHandler, 
       "1_ERR", \&EseraOneWire_clientArtErrorHandler, \&EseraOneWire_unexpected_handler, undef);
 
-    # clear the hash of known devices so that the modified article/product number is used
-    EseraOneWire_refreshControllerInfo($hash);
+    # trigger an update of the device type in the device list
+    EseraOneWire_removeDeviceTypeFromList($hash, $oneWireId);
+    EseraOneWire_updateDeviceList($hash)
   }
   elsif ($fields[0] eq "status")
   {
@@ -977,9 +1047,8 @@ EseraOneWire_Write($$)
 # Readings
 ################################################################################
 
-# TODO rename to _forwardReadingToClient
 sub 
-EseraOneWire_parseReadings($$$$$)
+EseraOneWire_forwardReadingToClient($$$$$)
 {
   my ($hash, $fieldsCount, $owId, $readingId, $value) = @_;
   my $name = $hash->{NAME};
@@ -992,8 +1061,7 @@ EseraOneWire_parseReadings($$$$$)
   my $deviceTypesRef = $hash->{DEVICE_TYPES};
   if (!defined $eseraIdsRef || !defined $deviceTypesRef)
   {
-    Log3 $name, 1, "EseraOneWire ($name) - info: received data for ".$owId." but device list does not exist. Ignoring data. Triggering re-reading of list of devices from controller.";
-    EseraOneWire_refreshControllerInfo($hash);
+    EseraOneWire_updateDeviceList($hash);
     return undef;
   }
   
@@ -1001,15 +1069,14 @@ EseraOneWire_parseReadings($$$$$)
   my %deviceTypes = %$deviceTypesRef;
   if (!defined $eseraIds{$owId} || !defined $deviceTypes{$owId})
   {
-    Log3 $name, 1, "EseraOneWire ($name) - info: received data for ".$owId." which is not known. Ignoring data. Triggering re-reading of list of devices from controller.";
-    EseraOneWire_refreshControllerInfo($hash);
+    EseraOneWire_updateDeviceList($hash);
     return undef;
   }
   
   my $deviceType = $deviceTypes{$owId};
   my $eseraId = $eseraIds{$owId};
   my $message = $deviceType."_".$owId."_".$eseraId."_".$readingId."_".$value;
-  Log3 $name, 4, "EseraOneWire ($name) - passing reading to clients: ".$message;
+  Log3 $name, 4, "EseraOneWire ($name) - forwarding reading to clients: ".$message;
   Dispatch($hash, $message, "");
   
   return undef;
@@ -1059,7 +1126,7 @@ EseraOneWire_parseReadingsInSingleLine($$)
         my $readingId = $2;
         my $value = $fields[1];
 
-        EseraOneWire_parseReadings($hash, 2, $owId, $readingId, $value);
+        EseraOneWire_forwardReadingToClient($hash, 2, $owId, $readingId, $value);
       }
       elsif ($fields[0] =~ m/^1_([0-9A-F]+)$/)
       {
@@ -1067,7 +1134,7 @@ EseraOneWire_parseReadingsInSingleLine($$)
         my $readingId = 0;
         my $value = $fields[1];
 
-        EseraOneWire_parseReadings($hash, 2, $owId, $readingId, $value);
+        EseraOneWire_forwardReadingToClient($hash, 2, $owId, $readingId, $value);
       }
       elsif ($fields[0] =~ m/1_([0-9:]+)_(\d+)/)   # TODO still needed after controller update?
       {
@@ -1075,7 +1142,7 @@ EseraOneWire_parseReadingsInSingleLine($$)
         my $readingId = 0;
         my $value = $fields[1];
 	
-        EseraOneWire_parseReadings($hash, 2, $owId, $readingId, $value);
+        EseraOneWire_forwardReadingToClient($hash, 2, $owId, $readingId, $value);
       }
       elsif ($fields[0] =~ m/^1_SYS(\d)_(\d)/)
       {

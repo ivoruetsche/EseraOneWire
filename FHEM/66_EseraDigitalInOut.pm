@@ -375,11 +375,9 @@ EseraDigitalInOut_Set($$)
   my $oneWireId = $hash->{ONEWIREID};
   my $iodev = $hash->{IODev}->{NAME};
   
-  my $commands = ("on off out");
+  my $commands = ("on:noArg off:noArg out");
   
-  #return $commands if ( $cmd eq '?' || $cmd eq '');
-
-  if ($what eq "digout") 
+  if ($what eq "out") 
   {
     if ((scalar(@parameters) != 4))
     {

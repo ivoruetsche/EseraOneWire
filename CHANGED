@@ -10,3 +10,8 @@ EseraOneWire last changes:
  - added support for analog output devices, 66_EseraAnalogInOut
  - added support for Esera multi sensor 11132 in 66_EseraMulti
  - changed reading names (removing unnecessary/redundant parts)
+2019-02-06
+ - more tolerant reset sequence of 66_EseraOneWire
+ - incremental update of device list in 66_EseraOneWire
+ - bug fix for "set out" of 66_EseraDigitalInOut
+ 
