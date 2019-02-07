@@ -4,6 +4,8 @@
 #
 # Copyright pizmus 2018
 #
+#  --- THIS IS EXPERIMENTAL ---
+
 # This FHEM module supports iButton devices connected via an Esera 1-wire Controller
 # and the 66_EseraOneWire module.
 #
@@ -225,6 +227,7 @@ EseraIButton_Attr(@)
 <h3>EseraIButton</h3>
 
 <ul>
+  THIS IS EXPERIMENTAL!!!<br>
   This module implements a 1-wire iButton. It uses 66_EseraOneWire as I/O device.<br>
   Events are generated for connecting and disconnecting an iButton.
   Note: The Esera Controller needs to know the iButton so that it can detect it quickly when it is connected.<br>

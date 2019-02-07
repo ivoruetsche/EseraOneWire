@@ -6,7 +6,7 @@
 #
 # This FHEM module supports DS2423 counters.   
 #
-#  --- THIS IS EXPERIMENTAL AND UNTESTED ---
+#  --- THIS IS EXPERIMENTAL ---
 #
 ################################################################################
 #
@@ -233,6 +233,7 @@ EseraCount_Attr(@)
 <h3>EseraCount</h3>
 
 <ul>
+  THIS IS EXPERIMENTAL!!!<br>
   This module supports DS2423 1-wire dual counters.<br>
   It uses 66_EseraOneWire as I/O device.<br>
   <br>
