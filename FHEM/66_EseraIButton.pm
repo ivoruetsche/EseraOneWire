@@ -4,20 +4,9 @@
 #
 # Copyright pizmus 2018
 #
-#  --- THIS IS EXPERIMENTAL ---
-
 # This FHEM module supports iButton devices connected via an Esera 1-wire Controller
 # and the 66_EseraOneWire module.
-#
-# supported device types: DS2401
-#
-################################################################################
-#
-# Known issues and potential enhancements:
-#
-# - In order to detect iButtons quickly they have to be known to the Controller.
-#   See commandRef. Enhancement: Provide a way to save the device list in the 
-#   controller via FHEM.
+# For more details please read the device specific help / commandref.
 #
 ################################################################################
 
@@ -31,7 +20,7 @@ sub
 EseraIButton_Initialize($) 
 {
   my ($hash) = @_;
-  $hash->{Match}         = "DS2401"; # TODO
+  $hash->{Match}         = "DS2401";
   $hash->{DefFn}         = "EseraIButton_Define";
   $hash->{UndefFn}       = "EseraIButton_Undef";
   $hash->{ParseFn}       = "EseraIButton_Parse";
@@ -227,13 +216,22 @@ EseraIButton_Attr(@)
 <h3>EseraIButton</h3>
 
 <ul>
-  THIS IS EXPERIMENTAL!!!<br>
-  This module implements a 1-wire iButton. It uses 66_EseraOneWire as I/O device.<br>
-  Events are generated for connecting and disconnecting an iButton.
-  Note: The Esera Controller needs to know the iButton so that it can detect it quickly when it is connected.<br>
-  You need to train the controller by connecting the iButton for ~10 seconds and store the device list in the<br>
-  controller. TODO: put command here. This can be done easily with the "Config Tool 3" from Esera. See the<br>
-  "Programmierhandbuch" from Esera for details.<br>
+  This module supports 1-wire iButton devices. It uses 66_EseraOneWire as I/O device.<br>
+  Events are generated for connecting and disconnecting an iButton.<br>
+  <br>
+  The Esera Controller needs to know the iButton so that it can detect it quickly when it <br>
+  is connected. The iButton needs to be in the list of devices which is stored in a non-volatile <br>
+  memory in the controller. Initially, you need to connect a new iButton for ~10 seconds. Use the <br>
+  "get devices" query of EseraOneWire to check whether the device has been detected. When it has <br>
+  been detected use "set savelist" to store the current list in the controller. Repeat the same <br>
+  procedure with additional iButtons. Alternatively, you can use the "Config Tool 3" software from <br>
+  Esera to store iButton devices in the controller.<br>
+  <br>
+  It is stronly recommended to use the additional license "iButton Fast Mode" from Esera (product <br>
+  number 40202). With this license the controller detects iButton devices quickly. Without that <br>
+  license the controller sometimes needs quite long to detect an iButton. <br>
+  <br>
+  See the "Programmierhandbuch" from Esera for details.<br>
   <br>
   
   <a name="EseraIButton_Define"></a>

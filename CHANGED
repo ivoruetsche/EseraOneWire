@@ -16,3 +16,6 @@ EseraOneWire last changes:
  - bug fix for "set out" of 66_EseraDigitalInOut
 2019-02-07
  - experimental support for DS2423 (dual counter)
+2019-02-14
+ - full support for iButton
+ - experimental support for serial/USB communication

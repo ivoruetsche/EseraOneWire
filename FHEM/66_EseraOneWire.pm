@@ -12,6 +12,10 @@
 #  66_EseraMulti
 #  66_EseraTemp
 #  66_EseraCount
+#  66_EseraIButton
+#
+# For Esera 1-wire controllers with serial/USB interface please check the
+# commandref.
 #
 ################################################################################
 #
@@ -28,8 +32,6 @@
 #
 # Known issues and potential enhancements:
 #
-# - Add regression test for a defined test setup, so that source code changes
-#   can be validated easily.
 # - Let the user control certain settings, like DATATIME, SEACHTIME and wait time
 #   used after posted writes, e.g. as parameters to the define command.
 # - Generate warning/error if firmware version does not match.
@@ -82,15 +84,23 @@ EseraOneWire_Define($$)
   # $a[1] is always equals the module name "ESERA"
   
   # first argument is the hostname or IP address of the device (e.g. "192.168.1.120")
+  # or the serial port (e.g. /dev/ttyUSB0)
   my $dev = $a[2]; 
 
   return "no device given" unless($dev);
   
-  # add the default port
-  $dev .= ':5000' if(not $dev =~ m/:\d+$/);
-  
-  Log3 $name, 3, "EseraOneWire ($name) - define: $dev";
-    
+  my $isSerialDevice = ($dev =~ m/^COM|^\/dev\//);
+  if (not $isSerialDevice)
+  {
+    # add the default port
+    $dev .= ':5000' if (not $dev =~ m/:\d+$/);
+    Log3 $name, 3, "EseraOneWire ($name) - define: $dev (TCP/IP)";
+  }
+  else
+  {
+    Log3 $name, 3, "EseraOneWire ($name) - define: $dev (serial)";
+  }
+      
   $hash->{DeviceName} = $dev;
   
   # close connection if maybe open (on definition modify)
@@ -203,6 +213,10 @@ EseraOneWire_baseSettings($)
   
   # get iButton events for connect and disconnect
   EseraOneWire_taskListAddSimple($hash, "set,key,data,2", "1_DATA", \&EseraOneWire_query_response_handler);
+  # activate fast mode (if license is available)
+  EseraOneWire_taskListAddSimple($hash, "set,key,fast,1", "1_FAST", \&EseraOneWire_query_response_handler);
+  # load list of devices so that iButton devices which are stored in the controller are handled quickly
+  EseraOneWire_taskListAddSimple($hash, "set,owb,load", "1_LOAD", \&EseraOneWire_query_response_handler);
     
   # more explicit default settings...
   EseraOneWire_taskListAddSimple($hash, "set,sys,datatime,10", "1_DATATIME", \&EseraOneWire_query_response_handler);
@@ -260,10 +274,11 @@ EseraOneWire_updateDeviceList($)
   # do not clear old device information
   
   # Enqueue a query to retrieve the device list.
-  # The LST0 query gets multiple responses, depending on the number of devices known by the controller.
+  # The LST query gets multiple responses. We read all devices, not just the currently active ones,
+  # so that iButton devices which are known to the controller can be handled.
   # Read the list with a posted write. The wait time has to chosen so that all LST responses are received
   # before the next command is sent. LST responses are handled generically in the EseraOneWire_Read().
-  EseraOneWire_taskListAddPostedWrite($hash, "get,owb,list0", 2);
+  EseraOneWire_taskListAddPostedWrite($hash, "get,owb,listall", 2);
   
   # This must be the last one.
   EseraOneWire_taskListAddSimple($hash, "get,sys,run", "1_RUN", \&EseraOneWire_read_complete_handler);
@@ -287,10 +302,11 @@ EseraOneWire_refreshControllerInfo($)
   
   # queue queries to retrieve updated information
 
-  # The LST0 query gets multiple responses, depending on the number of devices known by the controller.
+  # The LST query gets multiple responses. We read all devices, not just the currently active ones,
+  # so that iButton devices which are known to the controller can be handled.
   # Read the list with a posted write. The wait time has to chosen so that all LST responses are received
   # before the next command is sent. LST responses are handled generically in the EseraOneWire_Read().
-  EseraOneWire_taskListAddPostedWrite($hash, "get,owb,list0", 2);
+  EseraOneWire_taskListAddPostedWrite($hash, "get,owb,listall", 2);
 
   EseraOneWire_taskListAddSimple($hash, "get,sys,fw", "1_FW", \&EseraOneWire_query_response_handler);
   EseraOneWire_taskListAddSimple($hash, "get,sys,hw", "1_HW", \&EseraOneWire_query_response_handler);
@@ -319,10 +335,9 @@ EseraOneWire_refreshControllerInfo($)
   EseraOneWire_taskListAddSimple($hash, "get,owd,ds2408inv", "1_DS2408INV", \&EseraOneWire_query_response_handler);
   
   EseraOneWire_taskListAddSimple($hash, "get,key,data", "1_DATA", \&EseraOneWire_query_response_handler);
-  
-  # TODO This query does not work.
-  #EseraOneWire_taskListAddSimple($hash, "get,key,fast", "1_FAST", \&EseraOneWire_query_response_handler);
-  
+  EseraOneWire_taskListAddSimple($hash, "get,key,fast", "1_FAST", \&EseraOneWire_query_response_handler);
+  EseraOneWire_taskListAddSimple($hash, "get,sys,liz,2", "1_LIZ", \&EseraOneWire_LIZ2_handler);
+
   # TODO This does not work. The command is documented like this but it causes an 
   # ERR response. What does the last parameter mean anyway? Ask Esera.
   # 2018.09.23 15:36:04 1: EseraOneWire (owc) - COMM sending: get,sys,owdid,0
@@ -467,6 +482,14 @@ EseraOneWire_Set($$)
     EseraOneWire_refreshStatus($hash);
     EseraOneWire_refreshControllerInfo($hash);
   }
+  elsif ($what eq "clearlist")
+  {
+    EseraOneWire_taskListAddSimple($hash, "set,owb,delmem", "1_DELMEM", \&EseraOneWire_query_response_handler);
+  }
+  elsif ($what eq "savelist")
+  {
+    EseraOneWire_taskListAddSimple($hash, "set,owb,save", "1_SAVE", \&EseraOneWire_query_response_handler);
+  }
   elsif ($what eq "reset")
   {
     if (scalar(@parameters) != 3)
@@ -496,12 +519,12 @@ EseraOneWire_Set($$)
   }
   elsif ($what eq "?")
   {
-    my $message = "unknown argument $what, choose one of refresh:noArg reset:controller,tasks raw";
+    my $message = "unknown argument $what, choose one of clearlist:noArg savelist:noArg refresh:noArg reset:controller,tasks raw";
     return $message;
   }
   else
   {
-    my $message = "unknown argument $what, choose one of reset refresh raw";
+    my $message = "unknown argument $what, choose one of clearlist savelist reset refresh raw";
     Log3 $name, 1, "EseraOneWire ($name) - ".$message;
     return $message;
   }
@@ -605,6 +628,7 @@ EseraOneWire_getSettings($)
   my $ds2408inv = $hash->{".DS2408INV"};
   my $data = $hash->{".DATA"};
   my $fast = $hash->{".FAST"};
+  my $license = $hash->{".LIZ2"};
   
   $run = "UNKNOWN" if (!defined $run);
   $contno = "UNKNOWN" if (!defined $contno);
@@ -622,6 +646,7 @@ EseraOneWire_getSettings($)
   $ds2408inv = "UNKNOWN" if (!defined $ds2408inv);
   $data = "UNKNOWN" if (!defined $data);
   $fast = "UNKNOWN" if (!defined $fast);
+  $license = "UNKNOWN" if (!defined $license);
 
   $list .= "RUN: ".$run." (1=controller sending to FHEM)\n";
   $list .= "CONTNO: ".$contno." (ESERA controller number)\n";
@@ -638,9 +663,8 @@ EseraOneWire_getSettings($)
   $list .= "POLLTIME: ".$polltime." (time period in seconds used with periodic reads from devices)\n";
   $list .= "DS2408INV: ".$ds2408inv." (1=invert readings from DS2408 devices)\n"; 
   $list .= "DATA: ".$data." (2=get events for iButton connect and disconnect)\n"; 
-  
-  # TODO FAST is UNKNOWN, WHY?
-  #$list .= "FAST: ".$fast." (1=fast polling is enabled, requires special license)\n"; 
+  $list .= "FAST: ".$fast." (1=fast polling is enabled, requires special license)\n"; 
+  $list .= "LIZ2: ".$license." (1=iButton fast mode license found)\n"; 
   
   return $list;
 }
@@ -817,13 +841,13 @@ EseraOneWire_Read($)
     {
       Log3 $name, 5, "EseraOneWire ($name) - COMM - 1_KAL message ignored";
     }   
-    elsif ($type eq "1_LST0") 
+    elsif ($type =~ m/^1_LST/) 
     {
-      Log3 $name, 4, "EseraOneWire ($name) - COMM - 1_LST0 received";
+      Log3 $name, 4, "EseraOneWire ($name) - COMM - 1_LST received";
     }
     elsif ($type eq "LST") 
     {
-      EseraOneWire_LIST0_handler($hash, $ascii);
+      EseraOneWire_LIST_handler($hash, $ascii);
     }    
     elsif ($type =~ m/1_OWD(\d+)_(\d+)/)
     {
@@ -836,7 +860,7 @@ EseraOneWire_Read($)
     {
       if ($hash->{".CONTROLLER_INITIALIZED"})
       {
-        EseraOneWire_parseReadingsInSingleLine($hash, $ascii);
+        EseraOneWire_parseReading($hash, $ascii);
       }
       else
       {
@@ -847,7 +871,18 @@ EseraOneWire_Read($)
     {
       if ($hash->{".CONTROLLER_INITIALIZED"})
       {
-        EseraOneWire_parseReadingsInSingleLine($hash, $ascii);
+        EseraOneWire_parseReading($hash, $ascii);
+      }
+      else
+      {
+        Log3 $name, 5, "EseraOneWire ($name) - readings ignored because controller is not initialized (2)";
+      }
+    } 
+    elsif ($ascii =~ m/^1_OWD([0-9A-F]+)\|/)
+    {
+      if ($hash->{".CONTROLLER_INITIALIZED"})
+      {
+        EseraOneWire_parseReading($hash, $ascii);
       }
       else
       {
@@ -858,7 +893,7 @@ EseraOneWire_Read($)
     {
       if ($hash->{".CONTROLLER_INITIALIZED"})
       {
-        EseraOneWire_parseReadingsInSingleLine($hash, $ascii);
+        EseraOneWire_parseReading($hash, $ascii);
       }
       else
       {
@@ -881,12 +916,12 @@ EseraOneWire_processListEntry($$)
   my ($hash, $fieldsRef) = @_;
   my $name = $hash->{NAME};
   my @fields = @$fieldsRef;
-  if (scalar(@fields) != 4)
+  if (scalar(@fields) != 5)
   {
     Log3 $name, 1, "EseraOneWire ($name) - error: unexpected number of response fields for list entry";
   }
 
-  # extract data from response
+  # extract OWD number from response
   my $longEseraOwd = $fields[1];
   my $eseraOwd;
   if ($longEseraOwd =~ m/1_OWD(\d+)$/)
@@ -896,11 +931,24 @@ EseraOneWire_processListEntry($$)
   else
   {
     $eseraOwd = "_".$longEseraOwd."_";
+    Log3 $name, 1, "EseraOneWire ($name) - error: unexpected OWD number format in LST response: ".$longEseraOwd;
   }
   
+  # extract 1-wire ID
   my $oneWireId = $fields[2];
-  my $oneWireDeviceType = $fields[3];
-  Log3 $name, 4, "EseraOneWire ($name) - new list entry: Esera OWD ".$eseraOwd." 1-wire ID ".$oneWireId." device type ".$oneWireDeviceType;
+  
+  my $status = $fields[3];
+  
+  # extract device type
+  my $oneWireDeviceType = $fields[4];
+  
+  Log3 $name, 5, "EseraOneWire ($name) - new list entry: Esera OWD ".$eseraOwd." 1-wire ID ".$oneWireId." device type ".$oneWireDeviceType;
+
+  if ($oneWireId =~ m/^FFFFFFFFFFFFFFFF/)
+  {
+    Log3 $name, 5, "EseraOneWire ($name) - list entry ".$eseraOwd." is not in use";
+    return;
+  }
 
   # store ESERA ID in hash
   if (defined $hash->{ESERA_IDS})
@@ -937,39 +985,26 @@ EseraOneWire_processListEntry($$)
   }
 }
 
-# TODO This is called with single LST response only, optimize!
 sub 
-EseraOneWire_LIST0_handler($$)
+EseraOneWire_LIST_handler($$)
 {
   my ($hash, $response) = @_;
   my $name = $hash->{NAME};
-  
-  # example of "list0" response: "1_LST0|13:47:48;LST|1_OWD1|660000001A590029|DS2408;LST|1_OWD2|06000019828A9B29|DS2408;"
-  my @listElements = split(/;/, $response);
-  
-  foreach (@listElements)
+     
+  my @fields = split(/\|/, $response);
+  my $numberOfFields = scalar(@fields);
+  if ($numberOfFields > 0)
   {
-    my $listElement = $_;
-   
-    my @fields = split(/\|/, $listElement);
-    my $numberOfFields = scalar(@fields);
-    if ($numberOfFields > 0)
+    my $type = $fields[0];
+    if ($type eq "LST")
     {
-      my $type = $fields[0];
-      if ($type eq "1_LST0") 
-      {
-        Log3 $name, 4, "EseraOneWire ($name) - 1_LST0 ignored";
-      }
-      elsif ($type eq "LST")
-      {
-        EseraOneWire_processListEntry($hash, \@fields);
-      }
-      else
-      {
-        Log3 $name, 1, "EseraOneWire ($name) - unexpected content in LST response: ".$listElement;
-      }
+      EseraOneWire_processListEntry($hash, \@fields);
     }
-  }
+    else
+    {
+      Log3 $name, 1, "EseraOneWire ($name) - unexpected content in LST response: ".$response;
+    }
+  } 
 }
 
 ################################################################################
@@ -1103,75 +1138,91 @@ EseraOneWire_parseSysReadings($$$$$)
   return undef;
 }
 
-# TODO rename to parseReading, and let it work on a single reading only. Multiple readings in same line are not expected anymore.
+# examples of reading messages from controller:
+#2019.02.13 23:43:17 4: EseraOneWire (owc2) - COMM Read: 1_SYS1_1|0
+#2019.02.13 23:43:17 4: EseraOneWire (owc2) - COMM Read: 1_SYS1_2|00000000
+#2019.02.13 23:43:18 4: EseraOneWire (owc2) - COMM Read: 1_SYS2_1|0
+#2019.02.13 23:43:18 4: EseraOneWire (owc2) - COMM Read: 1_SYS2_2|00000000
+#2019.02.13 23:43:18 4: EseraOneWire (owc2) - COMM Read: 1_SYS3|0
+#2019.02.13 23:43:18 4: EseraOneWire (owc2) - COMM Read: 1_0400000763496828|2262
+#2019.02.13 23:43:18 4: EseraOneWire (owc2) - COMM Read: 1_E6000001C3748301|1
+#2019.02.13 23:43:20 4: EseraOneWire (owc2) - COMM Read: 1_OWD2|0
+#2019.02.13 23:43:22 4: EseraOneWire (owc2) - COMM Read: 1_OWD2|1
 sub 
-EseraOneWire_parseReadingsInSingleLine($$)
+EseraOneWire_parseReading($$)
 {
   my ($hash, $line) = @_;
   my $name = $hash->{NAME};
 
-  # example of single line reading: "1_1:17:211_660000001A590029_1|32;1_660000001A590029_2|00100000;1_660000001A590029_3|0;1_661_1:17:211_660000001A590029_1|32;1_660000001A590029_2|00100000;1_660000001A590029_3|0;1_660000001A590029_4|00000000;1_06000019828A9B29_1|0;1_06000019828A9B29_2|00000000;1_06000019828A9B29_3|0;1_06000019828A9B29_4|00000000;0000001A590029_4|00000000;1_06000019828A9B29_1|0;1_06000019828A9B29_2|00000000;1_06000019828A9B29_3|0;1_06000019828A9B29_4|00000000;"
-  my @listElements = split(/;/, $line);
-  
-  foreach (@listElements)
-  {
-    my $listElement = $_;
-    Log3 $name, 4, "EseraOneWire ($name) - listElement: ".$listElement;
+  Log3 $name, 4, "EseraOneWire ($name) - line: ".$line;
    
-    my @fields = split(/\|/, $listElement);
-    my $numberOfFields = scalar(@fields);
-    if ($numberOfFields == 2)
+  my @fields = split(/\|/, $line);
+  my $numberOfFields = scalar(@fields);
+  if ($numberOfFields == 2)
+  {
+    if ($fields[0] =~ m/^1_([0-9A-F]+)_([0-9]+)$/)
     {
-      if ($fields[0] =~ m/^1_([0-9A-F]+)_([0-9]+)$/)
-      {
-        my $owId = $1;
-        my $readingId = $2;
-        my $value = $fields[1];
+      my $owId = $1;
+      my $readingId = $2;
+      my $value = $fields[1];
 
-        EseraOneWire_forwardReadingToClient($hash, 2, $owId, $readingId, $value);
-      }
-      elsif ($fields[0] =~ m/^1_([0-9A-F]+)$/)
-      {
-        my $owId = $1;
-        my $readingId = 0;
-        my $value = $fields[1];
+      EseraOneWire_forwardReadingToClient($hash, 2, $owId, $readingId, $value);
+    }
+    elsif ($fields[0] =~ m/^1_([0-9A-F]+)$/)
+    {
+      my $owId = $1;
+      my $readingId = 0;
+      my $value = $fields[1];
 
-        EseraOneWire_forwardReadingToClient($hash, 2, $owId, $readingId, $value);
-      }
-      elsif ($fields[0] =~ m/1_([0-9:]+)_(\d+)/)   # TODO still needed after controller update?
-      {
-        my $owId = $2;
-        my $readingId = 0;
-        my $value = $fields[1];
-	
-        EseraOneWire_forwardReadingToClient($hash, 2, $owId, $readingId, $value);
-      }
-      elsif ($fields[0] =~ m/^1_SYS(\d)_(\d)/)
-      {
-        my $owId = "SYS".$1;
-        my $readingId = $2;
-        my $value = $fields[1];
+      EseraOneWire_forwardReadingToClient($hash, 2, $owId, $readingId, $value);
+    }
+    elsif ($fields[0] =~ m/1_([0-9:]+)_(\d+)/)   # TODO still needed after controller update?
+    {
+      my $owId = $2;
+      my $readingId = 0;
+      my $value = $fields[1];
 
-        EseraOneWire_parseSysReadings($hash, 2, $owId, $readingId, $value);
-      }
-      elsif ($fields[0] =~ m/^1_SYS3/)
-      {
-        my $owId = "SYS3";
-        my $readingId = 0;
-        my $value = $fields[1];
+      EseraOneWire_forwardReadingToClient($hash, 2, $owId, $readingId, $value);
+    }
+    elsif ($fields[0] =~ m/^1_SYS(\d)_(\d)/)
+    {
+      my $owId = "SYS".$1;
+      my $readingId = $2;
+      my $value = $fields[1];
 
-        EseraOneWire_parseSysReadings($hash, 2, $owId, $readingId, $value);
-      }
-      else
+      EseraOneWire_parseSysReadings($hash, 2, $owId, $readingId, $value);
+    }
+    elsif ($fields[0] =~ m/^1_SYS3/)
+    {
+      my $owId = "SYS3";
+      my $readingId = 0;
+      my $value = $fields[1];
+
+      EseraOneWire_parseSysReadings($hash, 2, $owId, $readingId, $value);
+    }
+    elsif ($fields[0] =~ m/^1_OWD(\d)/)
+    {
+      my $eseraId = $1;
+      my $owId = EseraOneWire_eseraIdToOneWireId($hash, $eseraId);
+      if (not $owId)
       {
         Log3 $name, 1, "EseraOneWire ($name) - unexpected readings format (1) $fields[0]";
+	return undef;
       }
+      my $readingId = 0;
+      my $value = $fields[1];
+      EseraOneWire_forwardReadingToClient($hash, 2, $owId, $readingId, $value);
     }
     else
     {
-    Log3 $name, 1, "EseraOneWire ($name) - unexpected readings format (2)";
+      Log3 $name, 1, "EseraOneWire ($name) - unexpected readings format (2) $fields[0]";
     }
   }
+  else
+  {
+    Log3 $name, 1, "EseraOneWire ($name) - unexpected readings format (3)";
+  }
+  return undef;
 }
 
 ################################################################################
@@ -1188,7 +1239,7 @@ EseraOneWire_query_response_handler($$)
 
   if (scalar(@fields) != 2)
   {
-    Log3 $name, 1, "EseraOneWire ($name) - error: unexpected number of response fields for generic query response";
+    Log3 $name, 1, "EseraOneWire ($name) - error: unexpected number of response fields for generic query response: ".$response;
     return;
   }
   
@@ -1240,6 +1291,24 @@ EseraOneWire_SEARCH_handler($$)
     Log3 $name, 1, "EseraOneWire ($name) - error: unexpected number of response fields for SEARCH query";
   }
   $hash->{".SEARCH_MODE"} = $fields[1];
+}
+
+sub 
+EseraOneWire_LIZ2_handler($$)
+{
+  my ($hash, $response) = @_;
+  my $name = $hash->{NAME};
+  $response =~ s/;//g;
+  my @fields = split(/\|/, $response);
+  if (scalar(@fields) != 3)
+  {
+    Log3 $name, 1, "EseraOneWire ($name) - error: unexpected number of response fields for LIZ,2 query";
+  }
+  if ($fields[1] != 2)
+  {
+    Log3 $name, 1, "EseraOneWire ($name) - error: unexpected LIZ response";
+  }
+  $hash->{".LIZ2"} = $fields[2];
 }
 
 sub 
@@ -1740,24 +1809,42 @@ EseraOneWire_taskListHandleResponse($$)
 
 <ul>
   This module provides an interface to Esera 1-wire controllers.<br>
-  The module works together with 66_Esera* modules which support <br>
+  The module works in conjunction with 66_Esera* modules which support <br>
   various 1-wire devices. See these modules for more information <br>
-  about supported 1-wire devices. The module supports autocreate. <br>
+  about supported 1-wire devices. This module supports autocreate. <br>
+  <br>
+  The module is tested with "Controller 1" and "Controller 2" with <br>
+  TCP/IP interface, implementing the Esera ASCII protocol as described <br>
+  in the Esera Controller Programmierhandbuch. The module <br>
+  supports serial connections as well, for controllers with serial/USB <br>
+  interface. However, this is not tested. Therefore, it will most likely <br>
+  not work out of the box. <br>
   <br>
   Tested with Esera controller firmware version 11903.<br>
   <br>
+  </ul>
   
   <a name="EseraOneWire_Define"></a>
   <b>Define</b>
   <ul>
     <code>define &lt;name&gt; EseraOneWire &lt;ip-address&gt;</code><br>
     Example: <code>define myEseraOneWireController EseraOneWire 192.168.0.15</code><br>
+    Example: <code>define myEseraOneWireController EseraOneWire /dev/ttyUSB0</code><br>
   </ul>
   <br>
   
   <a name="EseraOneWire_Set"></a>
   <b>Set</b>  
   <ul>
+    <li>
+      <b><code>set &lt;name&gt; clearlist</code><br></b>
+      Clear the list of devices which is persistently stored in the controller.<br>
+    </li>
+    <li>
+      <b><code>set &lt;name&gt; savelist</code><br></b>
+      Save the current list of devices persistently in the controller. This is only<br>
+      required when using iButton devices. See module EseraIButton for more information.
+    </li>
     <li>
       <b><code>set &lt;name&gt; reset controller</code><br></b>
       Sends a reset command to the controller.<br>
