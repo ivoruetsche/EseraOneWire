@@ -4,15 +4,8 @@
 #
 # Copyright pizmus 2018
 #
-# This FHEM module controls analog output device connected via
-# an Esera "1-wire Controller 1" with LAN interface and the 66_EseraOneWire 
-# module.
-#
-################################################################################
-#
-# Known issues and potential enhancements:
-#
-# - ...
+# This FHEM module controls analog input/output devices connected via
+# an Esera 1-wire controller and the 66_EseraOneWire module.
 #
 ################################################################################
 
@@ -30,13 +23,60 @@ my %SYS3Specs = (
   defaultValue => 0.0
 );
 
-my %specs = ("SYS3" => \%SYS3Specs);
+my %DS2450Specs = (
+  factor => 0.01,  # factor to get from raw reading to value in given unit
+  unit => "V",
+  lowLimit => 0.0,
+  highLimit => 0.0,
+  defaultValue => 0.0
+);
+
+my %Esera11202Specs = (
+  factor => 0.01,  # factor to get from raw reading to value in given unit
+  unit => "V",
+  lowLimit => 0.0,
+  highLimit => 0.0,
+  defaultValue => 0.0
+);
+
+my %Esera11203Specs = (
+  factor => 0.01,  # factor to get from raw reading to value in given unit
+  unit => "V",
+  lowLimit => 0.0,
+  highLimit => 0.0,
+  defaultValue => 0.0
+);
+
+my %Esera11208Specs = (
+  factor => 0.01,  # factor to get from raw reading to value in given unit
+  unit => "V",
+  lowLimit => 0.0,
+  highLimit => 10.0,
+  defaultValue => 0.0
+);
+
+my %Esera11219Specs = (
+  factor => 0.01,  # factor to get from raw reading to value in given unit
+  unit => "mA",
+  lowLimit => 0.0,
+  highLimit => 20.0,
+  defaultValue => 0.0
+);
+
+my %EseraAnalogInOutSpecs = (
+  "SYS3" => \%SYS3Specs,
+  "DS2450" => \%DS2450Specs,
+  "11202" => \%Esera11202Specs,
+  "11203" => \%Esera11203Specs,
+  "11208" => \%Esera11208Specs,
+  "11219" => \%Esera11219Specs
+  );
 
 sub 
 EseraAnalogInOut_Initialize($) 
 {
   my ($hash) = @_;
-  $hash->{Match}         = "SYS3";
+  $hash->{Match}         = "SYS3|DS2450|11202|11203|11208|11219";
   $hash->{DefFn}         = "EseraAnalogInOut_Define";
   $hash->{UndefFn}       = "EseraAnalogInOut_Undef";
   $hash->{ParseFn}       = "EseraAnalogInOut_Parse";
@@ -86,23 +126,23 @@ EseraAnalogInOut_Define($$)
   }
 
   # check and use LowLimit and HighLimit
-  if (!defined($specs{$deviceType}))
+  if (!defined($EseraAnalogInOutSpecs{$deviceType}))
   {
     Log3 $devName, 1, "EseraAnalogInOut ($devName) - unknown device type".$deviceType;
     return $usage;
   }
   
-  if (($lowLimit eq "-") || ($lowLimit < $specs{$deviceType}->{lowLimit}))
+  if (($lowLimit eq "-") || ($lowLimit < $EseraAnalogInOutSpecs{$deviceType}->{lowLimit}))
   {
-    $lowLimit = $specs{$deviceType}->{lowLimit};
+    $lowLimit = $EseraAnalogInOutSpecs{$deviceType}->{lowLimit};
   }
-  if (($highLimit eq "-") || ($highLimit > $specs{$deviceType}->{highLimit}))
+  if (($highLimit eq "-") || ($highLimit > $EseraAnalogInOutSpecs{$deviceType}->{highLimit}))
   {
-    $highLimit = $specs{$deviceType}->{highLimit};
+    $highLimit = $EseraAnalogInOutSpecs{$deviceType}->{highLimit};
   }
   $hash->{LOW_LIMIT} = $lowLimit;
   $hash->{HIGH_LIMIT} = $highLimit;
-	
+
   # program the the device type into the controller via the physical module
   if ($deviceType =~ m/^DS([0-9A-F]+)/)
   {
@@ -158,7 +198,67 @@ EseraAnalogInOut_setSysDigout($$$)
   }
 
   # set value
-  my $command = "set,sys,outa,".int($value / $specs{SYS3}->{factor});
+  my $command = "set,sys,outa,".int($value / $EseraAnalogInOutSpecs{SYS3}->{factor});
+  IOWrite($hash, "set;$owId;$command");
+  
+  return undef;
+}
+
+sub 
+EseraAnalogInOut_set11208Digout($$$)
+{
+  my ($hash, $owId, $value) = @_;
+  my $name = $hash->{NAME};
+  
+  if (($value < $hash->{LOW_LIMIT}) || ($value > $hash->{HIGH_LIMIT}))
+  {
+    my $message = "error: value out of range ".$value." ".$hash->{LOW_LIMIT}." ".$hash->{HIGH_LIMIT};
+    Log3 $name, 1, "EseraAnalogInOut ($name) - ".$message;
+    return $message;    
+  }
+  
+  # look up the ESERA ID
+  my $eseraId = $hash->{ESERAID};
+  if (!defined $eseraId)
+  {
+    my $message = "error: ESERA ID not known";
+    Log3 $name, 1, "EseraAnalogInOut ($name) - ".$message;
+    return $message;    
+  }
+
+  # set value
+  # SET,OWD,OUTA,OWD-Nummer,Ausgangsspannung
+  my $command = "set,owd,outa,".$eseraId.",".int($value / $EseraAnalogInOutSpecs{$hash->{DEVICE_TYPE}}->{factor});
+  IOWrite($hash, "set;$owId;$command");
+  
+  return undef;
+}
+
+sub 
+EseraAnalogInOut_set11219Digout($$$)
+{
+  my ($hash, $owId, $value) = @_;
+  my $name = $hash->{NAME};
+  
+  if (($value < $hash->{LOW_LIMIT}) || ($value > $hash->{HIGH_LIMIT}))
+  {
+    my $message = "error: value out of range ".$value." ".$hash->{LOW_LIMIT}." ".$hash->{HIGH_LIMIT};
+    Log3 $name, 1, "EseraAnalogInOut ($name) - ".$message;
+    return $message;    
+  }
+  
+  # look up the ESERA ID
+  my $eseraId = $hash->{ESERAID};
+  if (!defined $eseraId)
+  {
+    my $message = "error: ESERA ID not known";
+    Log3 $name, 1, "EseraAnalogInOut ($name) - ".$message;
+    return $message;    
+  }
+
+  # set value
+  # SET,OWD,OUTAMA,OWD-Nummer,Ausgangsstrom
+  my $command = "set,owd,outama,".$eseraId.",".int($value / $EseraAnalogInOutSpecs{$hash->{DEVICE_TYPE}}->{factor});
   IOWrite($hash, "set;$owId;$command");
   
   return undef;
@@ -182,9 +282,19 @@ EseraAnalogInOut_setOutput($$$)
     Log3 $name, 5, "EseraAnalogInOut ($name) - EseraAnalogInOut_setOutput SYS3 value: $value";
     EseraAnalogInOut_setSysDigout($hash, $oneWireId, $value);
   }
+  elsif ($hash->{DEVICE_TYPE} eq "11208")
+  {
+    Log3 $name, 5, "EseraAnalogInOut ($name) - EseraAnalogInOut_setOutput value: $value";
+    EseraAnalogInOut_set11208Digout($hash, $oneWireId, $value);
+  }
+  elsif ($hash->{DEVICE_TYPE} eq "11219")
+  {
+    Log3 $name, 5, "EseraAnalogInOut ($name) - EseraAnalogInOut_setOutput value: $value";
+    EseraAnalogInOut_set11219Digout($hash, $oneWireId, $value);
+  }
   else
   {
-    my $message = "error: device type not supported: ".$hash->{DEVICE_TYPE};
+    my $message = "error: device type not supported as analog output: ".$hash->{DEVICE_TYPE};
     Log3 $name, 1, "EseraAnalogInOut ($name) - ".$message;
     return $message;    
   }
@@ -224,7 +334,7 @@ EseraAnalogInOut_Set($$)
       Log3 $name, 1, "EseraAnalogInOut ($name) - ".$message;
       return $message;      
     }
-    my $value = AttrVal($name, "HighValue", $specs{SYS3}->{defaultValue});
+    my $value = AttrVal($name, "HighValue", $EseraAnalogInOutSpecs{$hash->{DEVICE_TYPE}}->{defaultValue});
     EseraAnalogInOut_setOutput($hash, $oneWireId, $value);
     $hash->{LAST_OUT} = 1;
   }
@@ -236,7 +346,7 @@ EseraAnalogInOut_Set($$)
       Log3 $name, 1, "EseraAnalogInOut ($name) - ".$message;
       return $message;      
     }
-    my $value = AttrVal($name, "LowValue", $specs{SYS3}->{defaultValue});
+    my $value = AttrVal($name, "LowValue", $EseraAnalogInOutSpecs{$hash->{DEVICE_TYPE}}->{defaultValue});
     EseraAnalogInOut_setOutput($hash, $oneWireId, $value);
     $hash->{LAST_OUT} = 0;
   }
@@ -292,13 +402,23 @@ EseraAnalogInOut_ParseForOneDevice($$$$$$)
   else
   { 
     my $nameOfReading = "";
-    if ($deviceType eq "SYS3")  # Controller 2 analog output
+    if (($deviceType eq "SYS3") || ($deviceType eq "11208") || ($deviceType eq "11219"))
     {
       if ($readingId == 0)
       {
         $nameOfReading .= "out";
-        my $readingValue = $value * $specs{SYS3}->{factor};
-	my $reading = $readingValue." ".$specs{SYS3}->{unit};
+        my $readingValue = $value * $EseraAnalogInOutSpecs{$deviceType}->{factor};
+	my $reading = $readingValue." ".$EseraAnalogInOutSpecs{$deviceType}->{unit};
+        readingsSingleUpdate($rhash, $nameOfReading, $reading, 1);
+      }
+    }
+    elsif (($deviceType eq "DS2450") || ($deviceType eq "11202") || ($deviceType eq "11203"))
+    {
+      if (($readingId >=1) && ($readingId <=4))
+      {
+        $nameOfReading .= "in".$readingId;
+        my $readingValue = $value * $EseraAnalogInOutSpecs{$deviceType}->{factor};
+	my $reading = $readingValue." ".$EseraAnalogInOutSpecs{$deviceType}->{unit};
         readingsSingleUpdate($rhash, $nameOfReading, $reading, 1);
       }
     }
@@ -353,12 +473,12 @@ EseraAnalogInOut_Parse($$)
       }
     }
   }
- 
+
   if ((scalar @list) > 0) 
   {
     return @list;
   }
-  elsif ($deviceType eq "SYS3")
+  elsif (exists($EseraAnalogInOutSpecs{$deviceType}))
   {
     return "UNDEFINED EseraAnalogInOut_".$ioName."_".$oneWireId." EseraAnalogInOut ".$ioName." ".$oneWireId." ".$deviceType." - -";
   }
@@ -397,11 +517,16 @@ EseraAnalogInOut_Attr(@)
     Supported values for deviceType:
     <ul> 
       <li>SYS3 (analog output build into the Esera Controller 2, Note: This does not show up in the "get devices" response.)</li>
+      <li>DS2450 (4x analog input)</li>
+      <li>11202 (4x analog input)</li>
+      <li>11203 (4x analog input)</li>
+      <li>11208 (analog output, voltage)</li>
+      <li>11219 (analog output, current)</li>
     </ul>
-	This module knows the high and low limits of the supported devices. You might<br>
-	want to further reduce the output range, e.g. to protect hardware connected to the <br>
-	output from user errors. You can use the parameters &lt;lowLimit&gt; and &lt;highLimit&gt; to do<br>
-	so. You can also give "-" for &lt;lowLimit&gt and &lt;highLimit&gt;. In this case the module uses<br>
+    This module knows the high and low limits of the supported devices. You might<br>
+    want to further reduce the output range, e.g. to protect hardware connected to the <br>
+    output from user errors. You can use the parameters &lt;lowLimit&gt; and &lt;highLimit&gt; to do<br>
+    so. You can also give "-" for &lt;lowLimit&gt and &lt;highLimit&gt;. In this case the module uses<br>
     the maximum possible output range.<br>
   </ul>
   <br>
