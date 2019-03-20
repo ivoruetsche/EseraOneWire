@@ -23,7 +23,7 @@ FHEM commands:
 1. Refresh the FHEM web UI to see devices auto-created for your 1-wire actors/sensors.
 1. Your EseraOneWire devices are ready to be used: Check the readings, try the queries
   provided by the controller, switch digital outputs, ...
-1. Read the Commandref of the new modules via the web UI.
+1. Read the Commandref of the Esera modules via the FHEM web UI.
 1. If your 1-wire sensor/actor is not auto-created: Check the log file for corresponding
   error messages. If your device is not supported yet please provide the log file.
   
