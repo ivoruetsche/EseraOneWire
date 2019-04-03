@@ -21,4 +21,6 @@ EseraOneWire last changes:
  - experimental support for serial/USB communication
 2019-03-19
  - added support for analog ports DS2450, Esera 11202, 11203, 11208, 11219
-
+2019-04-03
+ - added reading "status" to EseraOneWire
+ - added monitoring of hardware connection via "keep alive" signals from controller
