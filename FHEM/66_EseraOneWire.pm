@@ -1866,8 +1866,10 @@ EseraOneWire_KalTimeoutHandler($)
 {
   my ($hash) = @_;
   my $name = $hash->{NAME};
+  Log3 $name, 5, "EseraOneWire ($name) - EseraOneWire_KalTimeoutHandler";
   if (EseraOneWire_IsReadyToAcceptHardwareReadings($hash))
   {
+    Log3 $name, 1, "EseraOneWire ($name) - error: KAL timeout";
     # We expect that the controller is up and running, but we do not
     # receive KAL messages. -> Try to reconnect.    
     DevIo_CloseDev($hash) if(DevIo_IsOpen($hash));
