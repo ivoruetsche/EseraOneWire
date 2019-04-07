@@ -24,3 +24,5 @@ EseraOneWire last changes:
 2019-04-03
  - added reading "status" to EseraOneWire
  - added monitoring of hardware connection via "keep alive" signals from controller
+ 2019-04-07
+ - merged reading "status" with DevIo reading "state", generate "READY" event
