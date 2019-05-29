@@ -42,7 +42,7 @@ The following notes might be helpful to you when starting with a new EseraStatio
 1. sudo passwd fhem (optional)
 1. sudo vi /etc/passwd -> change the shell "/bin/false" to "/bin/bash" (optional)
 1. sudo reboot
-1. connect to fhem webUI http://*yourStationIpAddress*>:8083/fhem
+1. connect to fhem webUI http://*yourStationIpAddress*:8083/fhem
 1. install the EseraOneWire FHEM module as described aboved
 1. shutdown restart
 1. define EseraStation200 EseraOneWire /dev/serial0
