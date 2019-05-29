@@ -33,7 +33,7 @@ EseraCount_Initialize($)
   $hash->{SetFn}         = "EseraCount_Set";
   $hash->{GetFn}         = "EseraCount_Get";
   $hash->{AttrFn}        = "EseraCount_Attr";
-  $hash->{AttrList}      = "$readingFnAttributes";
+  $hash->{AttrList}      = "ticksPerUnit1 ticksPerUnit2 $readingFnAttributes";
 }
 
 sub 
@@ -56,6 +56,11 @@ EseraCount_Define($$)
   $hash->{ONEWIREID} = $oneWireId;
   $hash->{ESERAID} = undef;  # We will get this from the first reading.
   $hash->{DEVICE_TYPE} = $deviceType;
+  $hash->{DATE_OF_LAST_SAMPLE} = undef;
+  $hash->{START_VALUE_OF_DAY_1} = 0;
+  $hash->{START_VALUE_OF_DAY_2} = 0;
+  $hash->{LAST_VALUE_1} = 0;
+  $hash->{LAST_VALUE_2} = 0;
 
   $modules{EseraCount}{defptr}{$oneWireId} = $hash;
   
@@ -70,18 +75,6 @@ EseraCount_Define($$)
     Log3 $devName, 1, "$devName: no I/O device";
   }
 
-# TODO confirm it is not needed
-#  # program the the device type into the controller via the physical module
-#  if ($deviceType =~ m/^DS([0-9A-F]+)/)
-#  {
-#    # for the DS* devices types the "DS" has to be omitted
-#    IOWrite($hash, "assign;$oneWireId;$1");
-#  }
-#  else
-#  {
-#    IOWrite($hash, "assign;$oneWireId;$deviceType");
-#  }
-    
   return undef;
 }
 
@@ -106,6 +99,35 @@ EseraCount_Get($@)
 sub 
 EseraCount_Set($$) 
 {
+  return undef;
+}
+
+sub
+EseraCount_IsNewDay($)
+{
+  my ($hash) = @_;  
+  
+  my $timestamp = FmtDateTime(gettimeofday());
+  # example: 2016-02-16 19:34:24
+  
+  if ($timestamp =~ m/^([0-9\-]+)\s/)
+  {
+    my $dateString = $1;
+    
+    if (defined $hash->{DATE_OF_LAST_SAMPLE})
+    {
+      if (!($hash->{DATE_OF_LAST_SAMPLE} eq $dateString))
+      {
+        $hash->{DATE_OF_LAST_SAMPLE} = $dateString;
+        return 1;
+      }
+    }
+    else
+    {
+      $hash->{DATE_OF_LAST_SAMPLE} = $dateString;
+    }
+  }
+  
   return undef;
 }
 
@@ -165,18 +187,6 @@ EseraCount_Parse($$)
     if (!($rhash->{DEVICE_TYPE} eq uc($deviceType)))
     {
       Log3 $rname, 1, "EseraCount ($rname) - unexpected device type ".$deviceType;
- 
-# TODO not needed      
-#      # program the the device type into the controller via the physical module
-#      if ($rhash->{DEVICE_TYPE} =~ m/^DS([0-9A-F]+)/)
-#      {
-#        # for the DS* devices types the "DS" has to be omitted
-#        IOWrite($rhash, "assign;$oneWireId;$1");
-#      }
-#      else
-#      {
-#        IOWrite($rhash, "assign;$oneWireId;".$rhash->{DEVICE_TYPE});
-#      }
     }
     
     if ($readingId eq "ERROR")
@@ -189,18 +199,27 @@ EseraCount_Parse($$)
     }
     else
     {
-      my $nameOfReading;
       if ($deviceType eq "DS2423")
       {
+        if (EseraCount_IsNewDay($rhash))
+        {
+          $rhash->{START_VALUE_OF_DAY_1} = $rhash->{LAST_VALUE_1};
+          $rhash->{START_VALUE_OF_DAY_2} = $rhash->{LAST_VALUE_2};
+        }
+        
         if ($readingId == 1) 
         {
-          $nameOfReading = "count1";
-          readingsSingleUpdate($rhash, $nameOfReading, $value, 1);
+          my $ticksPerUnit = AttrVal($rname, "ticksPerUnit1", 1.0);
+          readingsSingleUpdate($rhash, "count1", ($value / $ticksPerUnit), 1);
+          readingsSingleUpdate($rhash, "count1Today", ($value - $rhash->{START_VALUE_OF_DAY_1}) / $ticksPerUnit, 1);
+          $rhash->{LAST_VALUE_1} = $value;
         }
         elsif ($readingId == 2) 
         {
-          $nameOfReading = "count2";
-          readingsSingleUpdate($rhash, $nameOfReading, $value, 1);
+          my $ticksPerUnit = AttrVal($rname, "ticksPerUnit2", 1.0);
+          readingsSingleUpdate($rhash, "count2", ($value / $ticksPerUnit), 1);
+          readingsSingleUpdate($rhash, "count2Today", ($value - $rhash->{START_VALUE_OF_DAY_2}) / $ticksPerUnit, 1);
+          $rhash->{LAST_VALUE_2} = $value;
         }
       }
     }
@@ -218,8 +237,26 @@ EseraCount_Parse($$)
 }
 
 sub 
-EseraCount_Attr(@) 
+EseraCount_Attr($$$$) 
 {
+  my ($cmd, $name, $attrName, $attrValue) = @_;
+  # $cmd  -  "del" or "set"
+  # $name - device name
+  # $attrName/$attrValue
+  
+  if ($cmd eq "set") {
+    if (($attrName eq "ticksPerUnit1") || ($attrName eq "ticksPerUnit2"))
+    {
+      if ($attrValue <= 0)
+      {
+        my $message = "illegal value for ticksPerUnit";
+        Log3 $name, 3, "EseraCount ($name) - ".$message;
+        return $message; 
+      }
+    }
+  }
+  
+  return undef;
 }
 
 1;
@@ -233,7 +270,6 @@ EseraCount_Attr(@)
 <h3>EseraCount</h3>
 
 <ul>
-  THIS IS EXPERIMENTAL!!!<br>
   This module supports DS2423 1-wire dual counters.<br>
   It uses 66_EseraOneWire as I/O device.<br>
   <br>
@@ -264,7 +300,8 @@ EseraCount_Attr(@)
   <a name="EseraCount_Attr"></a>
   <b>Attributes</b>
   <ul>
-    <li>no attributes</li>
+    <li><code>ticksPerUnit1</code></li>
+    <li><code>ticksPerUnit2</code></li>
   </ul>
   <br>
       
@@ -274,6 +311,8 @@ EseraCount_Attr(@)
     <ul>
       <li>count1</li>
       <li>count2</li>
+      <li>count1Today</li>
+      <li>count2Today</li>
     </ul>
   </ul>
   <br>

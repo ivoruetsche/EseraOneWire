@@ -34,10 +34,7 @@
 #
 # - Let the user control certain settings, like DATATIME, SEACHTIME and wait time
 #   used after posted writes, e.g. as parameters to the define command.
-# - Generate warning/error if firmware version does not match.
 # - Implement support for all devices listed in the Programmierhandbuch.
-# - Implement a kind of watchdog based on the KAL message received from the controller.
-#   Reset the connection and/or the controller if the message is not received on time.
 #
 ################################################################################
 
@@ -81,7 +78,7 @@ EseraOneWire_Define($$)
 
   my $name = $a[0];
 
-  # $a[1] is always equals the module name "ESERA"
+  # $a[1] always equals the module name
 
   # first argument is the hostname or IP address of the device (e.g. "192.168.1.120")
   # or the serial port (e.g. /dev/ttyUSB0)
@@ -103,6 +100,9 @@ EseraOneWire_Define($$)
 
   $hash->{DeviceName} = $dev;
 
+  $hash->{KAL_PERIOD} = 60;
+  $hash->{RECOMMENDED_FW} = 12027;
+
   # close connection if maybe open (on definition modify)
   DevIo_CloseDev($hash) if(DevIo_IsOpen($hash));
 
@@ -110,8 +110,6 @@ EseraOneWire_Define($$)
   DevIo_OpenDev($hash, 0, "EseraOneWire_Init", "EseraOneWire_Callback");
 
   EseraOneWire_SetStatus($hash, "defined");
-
-  $hash->{KAL_PERIOD} = 60;
 
   return undef;
 }
@@ -148,7 +146,7 @@ EseraOneWire_Ready($)
 }
 
 sub
-EseraOneWire_Attr(@)
+EseraOneWire_Attr($$$$)
 {
   my ($cmd, $name, $attrName, $attrValue) = @_;
   # $cmd  -  "del" or "set"
@@ -181,6 +179,17 @@ EseraOneWire_Callback($$)
   return undef;
 }
 
+sub
+EseraOneWire_initTimeoutHandler($)
+{
+  my ($hash) = @_;
+  my $name = $hash->{NAME};
+
+  Log3 $name, 3, "EseraOneWire ($name) - info: initialization timeout detected, trying again";
+
+  EseraOneWire_baseSettings($hash);
+}
+
 ################################################################################
 # controller info, settings and status
 ################################################################################
@@ -193,6 +202,10 @@ EseraOneWire_baseSettings($)
 
   EseraOneWire_SetStatus($hash, "initializing");
   $hash->{".READ_PENDING"} = 0;
+
+  # start a timeout counter for initialization
+  RemoveInternalTimer($hash, "EseraOneWire_initTimeoutHandler");
+  InternalTimer(gettimeofday()+60, "EseraOneWire_initTimeoutHandler", $hash);
 
   # clear task list before reset
   undef $hash->{TASK_LIST} unless (!defined $hash->{TASK_LIST});
@@ -219,8 +232,12 @@ EseraOneWire_baseSettings($)
 
   # get iButton events for connect and disconnect
   EseraOneWire_taskListAddSimple($hash, "set,key,data,2", "1_DATA", \&EseraOneWire_query_response_handler);
-  # activate fast mode (if license is available)
-  EseraOneWire_taskListAddSimple($hash, "set,key,fast,1", "1_FAST", \&EseraOneWire_query_response_handler);
+  
+  # Due to a bug in FW version 12027 there is no response to this command if the license is not available.
+  # Therefore, do a posted write only.
+  # EseraOneWire_taskListAddSimple($hash, "set,key,fast,1", "1_FAST", \&EseraOneWire_query_response_handler);
+  EseraOneWire_taskListAddPostedWrite($hash, "set,key,fast,1", 1.0);
+
   # load list of devices so that iButton devices which are stored in the controller are handled quickly
   EseraOneWire_taskListAddSimple($hash, "set,owb,load", "1_LOAD", \&EseraOneWire_query_response_handler);
 
@@ -314,7 +331,7 @@ EseraOneWire_refreshControllerInfo($)
   # before the next command is sent. LST responses are handled generically in the EseraOneWire_Read().
   EseraOneWire_taskListAddPostedWrite($hash, "get,owb,listall", 2);
 
-  EseraOneWire_taskListAddSimple($hash, "get,sys,fw", "1_FW", \&EseraOneWire_query_response_handler);
+  EseraOneWire_taskListAddSimple($hash, "get,sys,fw", "1_FW", \&EseraOneWire_fw_handler);
   EseraOneWire_taskListAddSimple($hash, "get,sys,hw", "1_HW", \&EseraOneWire_query_response_handler);
   EseraOneWire_taskListAddSimple($hash, "get,sys,serial", "1_SERIAL", \&EseraOneWire_query_response_handler);
   EseraOneWire_taskListAddSimple($hash, "get,sys,id", "1_ID", \&EseraOneWire_query_response_handler);
@@ -323,25 +340,20 @@ EseraOneWire_refreshControllerInfo($)
   EseraOneWire_taskListAddSimple($hash, "get,sys,contno", "1_CONTNO", \&EseraOneWire_query_response_handler);
   EseraOneWire_taskListAddSimple($hash, "get,sys,kalrec", "1_KALREC", \&EseraOneWire_query_response_handler);
   EseraOneWire_taskListAddSimple($hash, "get,sys,kalrectime", "1_KALRECTIME", \&EseraOneWire_query_response_handler);
-
-  # string mismatch between command and response, according to Esera this might be fixed in a later firmware
-  EseraOneWire_taskListAddSimple($hash, "get,sys,dataprint", "1_DATASEND", \&EseraOneWire_DATAPRINT_handler);
-
+  EseraOneWire_taskListAddSimple($hash, "get,sys,dataprint", "1_DATAPRINT", \&EseraOneWire_query_response_handler);
   EseraOneWire_taskListAddSimple($hash, "get,sys,datatime", "1_DATATIME", \&EseraOneWire_query_response_handler);
   EseraOneWire_taskListAddSimple($hash, "get,sys,kalsend", "1_KALSEND", \&EseraOneWire_query_response_handler);
   EseraOneWire_taskListAddSimple($hash, "get,sys,kalsendtime", "1_KALSENDTIME", \&EseraOneWire_query_response_handler);
   EseraOneWire_taskListAddSimple($hash, "get,owb,owdid", "1_OWDID", \&EseraOneWire_query_response_handler);
   EseraOneWire_taskListAddSimple($hash, "get,owb,owdidformat", "1_OWDIDFORMAT", \&EseraOneWire_query_response_handler);
-
-  # string mismatch between command and response, according to Esera this might be fixed in a later firmware
-  EseraOneWire_taskListAddSimple($hash, "get,owb,search", "1_SEARCHMODE", \&EseraOneWire_SEARCH_handler);
-
+  EseraOneWire_taskListAddSimple($hash, "get,owb,search", "1_SEARCH", \&EseraOneWire_query_response_handler);
   EseraOneWire_taskListAddSimple($hash, "get,owb,searchtime", "1_SEARCHTIME", \&EseraOneWire_query_response_handler);
   EseraOneWire_taskListAddSimple($hash, "get,owb,polltime", "1_POLLTIME", \&EseraOneWire_query_response_handler);
   EseraOneWire_taskListAddSimple($hash, "get,owd,ds2408inv", "1_DS2408INV", \&EseraOneWire_query_response_handler);
 
   EseraOneWire_taskListAddSimple($hash, "get,key,data", "1_DATA", \&EseraOneWire_query_response_handler);
-  EseraOneWire_taskListAddSimple($hash, "get,key,fast", "1_FAST", \&EseraOneWire_query_response_handler);
+  # Due to a bug in FW version 12027 this command does not get a response. Skip it for now.
+  # EseraOneWire_taskListAddSimple($hash, "get,key,fast", "1_FAST", \&EseraOneWire_query_response_handler);
   EseraOneWire_taskListAddSimple($hash, "get,sys,liz,2", "1_LIZ", \&EseraOneWire_LIZ2_handler);
 
   # TODO This does not work. The command is documented like this but it causes an
@@ -624,16 +636,17 @@ EseraOneWire_getSettings($)
   my $kalrectime = $hash->{".KALRECTIME"};
   my $kalsend = $hash->{".KALSEND"};
   my $kalsendtime = $hash->{".KALSENDTIME"};
-  my $datasend = $hash->{".DATASEND"};
+  my $dataprint = $hash->{".DATAPRINT"};
   my $datatime = $hash->{".DATATIME"};
   my $useOwdid = $hash->{".OWDID"};
   my $owdidFormat = $hash->{".OWDIDFORMAT"};
-  my $searchMode = $hash->{".SEARCH_MODE"};
+  my $searchMode = $hash->{".SEARCH"};
   my $searchTime = $hash->{".SEARCHTIME"};
   my $polltime = $hash->{".POLLTIME"};
   my $ds2408inv = $hash->{".DS2408INV"};
   my $data = $hash->{".DATA"};
   my $fast = $hash->{".FAST"};
+
   my $license = $hash->{".LIZ2"};
 
   $run = "UNKNOWN" if (!defined $run);
@@ -642,7 +655,7 @@ EseraOneWire_getSettings($)
   $kalrectime = "UNKNOWN" if (!defined $kalrectime);
   $kalsend = "UNKNOWN" if (!defined $kalsend);
   $kalsendtime = "UNKNOWN" if (!defined $kalsendtime);
-  $datasend = "UNKNOWN" if (!defined $datasend);
+  $dataprint = "UNKNOWN" if (!defined $dataprint);
   $datatime = "UNKNOWN" if (!defined $datatime);
   $useOwdid = "UNKNOWN" if (!defined $useOwdid);
   $owdidFormat = "UNKNOWN" if (!defined $owdidFormat);
@@ -660,11 +673,11 @@ EseraOneWire_getSettings($)
   $list .= "KALRECTIME: ".$kalrectime." (time period in seconds used for expected keep-alive messages)\n";
   $list .= "KALSEND: ".$kalsend." (1=controller sending keep-alive messages)\n";
   $list .= "KALSENDTIME: ".$kalsendtime." (time period in seconds used for sending keep-alive messages)\n";
-  $list .= "DATASEND: ".$datasend." (aka DATAPRINT, 0=list responses are returned in a single line)\n";
+  $list .= "DATAPRINT: ".$dataprint." (0=list responses are returned in a single line)\n";
   $list .= "DATATIME: ".$datatime." (time period used for data delivery to FHEM)\n";
   $list .= "OWDID: ".$useOwdid." (1=return readings with 1-wire ID instead of Esera ID)\n";
   $list .= "OWDIDFORMAT: ".$owdidFormat." (selects format of 1-wire ID)\n";
-  $list .= "SEARCH_MODE: ".$searchMode." (2=cyclic search for new devices)\n";
+  $list .= "SEARCH: ".$searchMode." (2=cyclic search for new devices)\n";
   $list .= "SEARCHTIME: ".$searchTime." (time period in seconds used to search for new devices)\n";
   $list .= "POLLTIME: ".$polltime." (time period in seconds used with periodic reads from devices)\n";
   $list .= "DS2408INV: ".$ds2408inv." (1=invert readings from DS2408 devices)\n";
@@ -1273,32 +1286,32 @@ EseraOneWire_RST_handler($$)
 }
 
 sub
-EseraOneWire_DATAPRINT_handler($$)
+EseraOneWire_fw_handler($$)
 {
   my ($hash, $response) = @_;
   my $name = $hash->{NAME};
   $response =~ s/;//g;
   my @fields = split(/\|/, $response);
+
   if (scalar(@fields) != 2)
   {
-    Log3 $name, 1, "EseraOneWire ($name) - error: unexpected number of response fields for DATASEND";
+    Log3 $name, 1, "EseraOneWire ($name) - error: unexpected number of response fields for fw query response: ".$response;
+    return;
   }
-  $hash->{".DATASEND"} = $fields[1];
+
+  if ($fields[0] =~ m/1_([A-Z0-9]+)$/)
+  {
+    my $key = ".".$1;
+    my $value = $fields[1];
+    $hash->{$key} = $value;
+    
+    if ($value != $hash->{RECOMMENDED_FW})
+    {
+      Log3 $name, 1, "EseraOneWire ($name) - warning: actual FW version is $value, recommended FW version is ".$hash->{RECOMMENDED_FW};
+    }
+  }
 }
 
-sub
-EseraOneWire_SEARCH_handler($$)
-{
-  my ($hash, $response) = @_;
-  my $name = $hash->{NAME};
-  $response =~ s/;//g;
-  my @fields = split(/\|/, $response);
-  if (scalar(@fields) != 2)
-  {
-    Log3 $name, 1, "EseraOneWire ($name) - error: unexpected number of response fields for SEARCH query";
-  }
-  $hash->{".SEARCH_MODE"} = $fields[1];
-}
 
 sub
 EseraOneWire_LIZ2_handler($$)
@@ -1352,6 +1365,10 @@ EseraOneWire_init_complete_handler($$$)
 {
   my ($hash, $command, $response) = @_;
   my $name = $hash->{NAME};
+
+  # stop the timeout counter
+  RemoveInternalTimer($hash, "EseraOneWire_initTimeoutHandler");
+
   EseraOneWire_SetStatus($hash, "initialized");
 }
 
@@ -1729,13 +1746,13 @@ EseraOneWire_taskListHandleResponse($$)
   my $taskListRef = $hash->{TASK_LIST};
   if (!defined $taskListRef)
   {
-    Log3 $name, 1, "EseraOneWire ($name) - task list does not exist";
+    Log3 $name, 4, "EseraOneWire ($name) - task list does not exist";
     return undef;
   }
   my @taskList = @$taskListRef;
   if ((scalar @taskList) < 1)
   {
-    Log3 $name, 1, "EseraOneWire ($name) - task list is empty";
+    Log3 $name, 4, "EseraOneWire ($name) - task list is empty";
     return undef;
   }
 
@@ -1827,14 +1844,14 @@ EseraOneWire_SetStatus($$)
   {
     Log3 $name, 5, "EseraOneWire ($name) - $status";
     $hash->{STATUS} = $status;
-    
+
     # Generate event consistently with events generated by DevIo.
     # Some other events are generated by DevIo.
     if ($status eq "ready")
     {
       DoTrigger($name, "READY");
     }
-    
+
     # Update "state" reading consistently with DevIo. Some other
     # values are set by DevIo. Do not create event for the "state"
     # reading.
@@ -1889,7 +1906,7 @@ EseraOneWire_KalTimeoutHandler($)
   {
     Log3 $name, 1, "EseraOneWire ($name) - error: KAL timeout";
     # We expect that the controller is up and running, but we do not
-    # receive KAL messages. -> Try to reconnect.    
+    # receive KAL messages. -> Try to reconnect.
     DevIo_CloseDev($hash) if(DevIo_IsOpen($hash));
     DevIo_OpenDev($hash, 0, "EseraOneWire_Init", "EseraOneWire_Callback");
   }
@@ -1900,7 +1917,7 @@ EseraOneWire_processKalMessage($)
 {
   my ($hash) = @_;
   my $name = $hash->{NAME};
-  
+
   Log3 $name, 5, "EseraOneWire ($name) - COMM - 1_KAL message received";
 
   RemoveInternalTimer($hash, "EseraOneWire_KalTimeoutHandler");
@@ -1930,10 +1947,9 @@ EseraOneWire_processKalMessage($)
   TCP/IP interface, implementing the Esera ASCII protocol as described <br>
   in the Esera Controller Programmierhandbuch. The module <br>
   supports serial connections as well, for controllers with serial/USB <br>
-  interface. However, this is not tested. Therefore, it will most likely <br>
-  not work out of the box. <br>
+  interface. It is tested with EseraStation 200.<br>
   <br>
-  Tested with Esera controller firmware version 11903.<br>
+  Tested with Esera controller firmware version 12027.<br>
   <br>
 
   <a name="EseraOneWire_Define"></a>

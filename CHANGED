@@ -1,28 +1,32 @@
 EseraOneWire last changes:
-2018-10-16
- - ensure default settings with set,sys,loaddefault,1 command
-2018-11-04
- - use SetExtensions with 66_EseraDigitalInOut
- - fixes for running multiple controllers at the same time
+2019-05-30
+ - daily reading and ticks-per-unit attribute added to EseraCount
+ - adjustments for controller firmware version 12027
+ - automatic retry if initialization fails
+2019-04-07
+ - merged reading "status" with DevIo reading "state", generate "READY" event
+2019-04-03
+ - added reading "status" to EseraOneWire
+ - added monitoring of hardware connection via "keep alive" signals from controller
+2019-03-19
+ - added support for analog ports DS2450, Esera 11202, 11203, 11208, 11219
+2019-02-14
+ - full support for iButton
+ - experimental support for serial/USB communication
+2019-02-07
+ - experimental support for DS2423 (dual counter)
+2019-02-06
+ - more tolerant reset sequence of 66_EseraOneWire
+ - incremental update of device list in 66_EseraOneWire
+ - bug fix for "set out" of 66_EseraDigitalInOut
 2018-11-16
  - added support for Esera "Controller 2" in 66_EseraOneWire
  - added support for digital input/output ports of "Controller 2" in 66_EseraDigitalInOut
  - added support for analog output devices, 66_EseraAnalogInOut
  - added support for Esera multi sensor 11132 in 66_EseraMulti
  - changed reading names (removing unnecessary/redundant parts)
-2019-02-06
- - more tolerant reset sequence of 66_EseraOneWire
- - incremental update of device list in 66_EseraOneWire
- - bug fix for "set out" of 66_EseraDigitalInOut
-2019-02-07
- - experimental support for DS2423 (dual counter)
-2019-02-14
- - full support for iButton
- - experimental support for serial/USB communication
-2019-03-19
- - added support for analog ports DS2450, Esera 11202, 11203, 11208, 11219
-2019-04-03
- - added reading "status" to EseraOneWire
- - added monitoring of hardware connection via "keep alive" signals from controller
- 2019-04-07
- - merged reading "status" with DevIo reading "state", generate "READY" event
+2018-11-04
+ - use SetExtensions with 66_EseraDigitalInOut
+ - fixes for running multiple controllers at the same time
+2018-10-16
+ - ensure default settings with set,sys,loaddefault,1 command
