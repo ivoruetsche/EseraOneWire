@@ -33,7 +33,7 @@ Optional: To give feedback regarding the use of EseraOneWire please call "fhemin
 # Getting starting with EseraStation 200
 The following notes might be helpful to you when starting with a new EseraStation. However, there is no guarantee that these notes are complete or correct. The information will get out of date over time and I do not intend to update it on a regular basis.
 1. power up EseraStation 200, connect it to LAN, get the IP address from your router
-1. ssh -X <your-station-ip-address> -l pi -> initial password is "esera"
+1. ssh -X *yourStationIpAddress* -l pi -> initial password is "esera"
 1. change the password
 1. sudo apt-get update
 1. sudo apt-get dist-upgrade -> got a question about IP Symcon, answer it and continue
@@ -42,7 +42,7 @@ The following notes might be helpful to you when starting with a new EseraStatio
 1. sudo passwd fhem (optional)
 1. sudo vi /etc/passwd -> change the shell "/bin/false" to "/bin/bash" (optional)
 1. sudo reboot
-1. connect to fhem webUI http://<your-station-ip-address>:8083/fhem
+1. connect to fhem webUI http://*yourStationIpAddress*>:8083/fhem
 1. install the EseraOneWire FHEM module as described aboved
 1. shutdown restart
 1. define EseraStation200 EseraOneWire /dev/serial0
