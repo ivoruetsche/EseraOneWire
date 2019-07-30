@@ -30,7 +30,7 @@ FHEM commands:
 # FHEM statistics
 Optional: To give feedback regarding the use of EseraOneWire please call "fheminfo send" in FHEM and set global attribute "sendStatistics". See the FHEM commandref for details about "fheminfo" and the statistics generated from it. You are also welcome to give feedback and ask questions regarding EseraOneWire in the FHEM forum.
 
-# Getting starting with EseraStation 200
+# Getting started with EseraStation 200
 The following notes might be helpful to you when starting with a new EseraStation. However, there is no guarantee that these notes are complete or correct. The information will get out of date over time and I do not intend to update it on a regular basis.
 1. power up EseraStation 200, connect it to LAN, get the IP address from your router
 1. ssh -X *yourStationIpAddress* -l pi -> initial password is "esera"
