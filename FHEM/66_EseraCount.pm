@@ -6,14 +6,6 @@
 #
 # This FHEM module supports DS2423 counters.   
 #
-#  --- THIS IS EXPERIMENTAL ---
-#
-################################################################################
-#
-# Known issues and potential enhancements:
-#
-# - ...
-#
 ################################################################################
 
 package main;
@@ -33,7 +25,7 @@ EseraCount_Initialize($)
   $hash->{SetFn}         = "EseraCount_Set";
   $hash->{GetFn}         = "EseraCount_Get";
   $hash->{AttrFn}        = "EseraCount_Attr";
-  $hash->{AttrList}      = "ticksPerUnit1 ticksPerUnit2 $readingFnAttributes";
+  $hash->{AttrList}      = "ticksPerUnit1 ticksPerUnit2 movingAverageFactor1 movingAverageFactor2 movingAverageCount1 movingAverageCount2 $readingFnAttributes";
 }
 
 sub 
@@ -131,6 +123,67 @@ EseraCount_IsNewDay($)
   return undef;
 }
 
+sub
+EseraCount_MovingAverage($$$$)
+{
+  my ($hash, $newValue, $averageCount, $channel) = @_;
+  my $name = $hash->{NAME};
+
+  Log3 $name, 5, "EseraCount ($name): averageCount $averageCount newValue $newValue";
+
+  # get array with the last samples
+  my @lastSamples;
+  my $ref;
+  if ($channel == 1)
+  {
+    $ref = $hash->{LAST_VALUES_1};
+  }
+  else
+  {
+    $ref = $hash->{LAST_VALUES_2};
+  }
+  if (defined $ref)
+  {
+    @lastSamples = @$ref;
+  }
+  else
+  {
+    @lastSamples = ();
+  }
+
+  # add new sample to front of the list
+  unshift(@lastSamples, $newValue);
+
+  # remove oldest sample if needed
+  while ((scalar @lastSamples) > $averageCount)
+  {
+    pop @lastSamples;
+    Log3 $name, 5, "EseraCount ($name): pop once";
+  }
+
+  # store new array in $hash
+  if ($channel == 1)
+  {
+    $hash->{LAST_VALUES_1} = \@lastSamples;
+  }
+  else
+  {
+    $hash->{LAST_VALUES_2} = \@lastSamples;
+  }
+
+  # calculate the average across the array
+  my $count = 0;
+  my $sum = 0;
+  foreach (@lastSamples)
+  {
+    $count += 1;
+    $sum += $_;
+    Log3 $name, 5, "EseraCount ($name): count $count sum $sum value $_";
+  }
+
+  return $sum / $count;
+}
+
 sub 
 EseraCount_Parse($$) 
 {
@@ -212,6 +265,14 @@ EseraCount_Parse($$)
           my $ticksPerUnit = AttrVal($rname, "ticksPerUnit1", 1.0);
           readingsSingleUpdate($rhash, "count1", ($value / $ticksPerUnit), 1);
           readingsSingleUpdate($rhash, "count1Today", ($value - $rhash->{START_VALUE_OF_DAY_1}) / $ticksPerUnit, 1);
+          if (defined $rhash->{LAST_VALUE_1})
+          {
+            my $movingAverageFactor = AttrVal($rname, "movingAverageFactor1", 1.0);
+            my $averageCount = AttrVal($rname, "movingAverageCount1", 1);
+            my $movingAverage = ($value - $rhash->{LAST_VALUE_1});
+            my $processedMovingAverage = EseraCount_MovingAverage($rhash, $movingAverage * $movingAverageFactor, $averageCount, 1);
+            readingsSingleUpdate($rhash, "count1MovingAverage", $processedMovingAverage, 1);
+          }
           $rhash->{LAST_VALUE_1} = $value;
         }
         elsif ($readingId == 2) 
@@ -219,6 +280,14 @@ EseraCount_Parse($$)
           my $ticksPerUnit = AttrVal($rname, "ticksPerUnit2", 1.0);
           readingsSingleUpdate($rhash, "count2", ($value / $ticksPerUnit), 1);
           readingsSingleUpdate($rhash, "count2Today", ($value - $rhash->{START_VALUE_OF_DAY_2}) / $ticksPerUnit, 1);
+          if (defined $rhash->{LAST_VALUE_2})
+          {
+            my $movingAverageFactor = AttrVal($rname, "movingAverageFactor2", 1.0);
+            my $averageCount = AttrVal($rname, "movingAverageCount2", 1);
+            my $movingAverage = ($value - $rhash->{LAST_VALUE_2});
+            my $processedMovingAverage = EseraCount_MovingAverage($rhash, $movingAverage * $movingAverageFactor, $averageCount, 2);
+            readingsSingleUpdate($rhash, "count2MovingAverage", $processedMovingAverage, 1);
+          }
           $rhash->{LAST_VALUE_2} = $value;
         }
       }
@@ -250,6 +319,24 @@ EseraCount_Attr($$$$)
       if ($attrValue <= 0)
       {
         my $message = "illegal value for ticksPerUnit";
+        Log3 $name, 3, "EseraCount ($name) - ".$message;
+        return $message; 
+      }
+    }
+    if (($attrName eq "movingAverageFactor1") || ($attrName eq "movingAverageFactor2"))
+    {
+      if ($attrValue <= 0)
+      {
+        my $message = "illegal value for movingAverageFactor";
+        Log3 $name, 3, "EseraCount ($name) - ".$message;
+        return $message; 
+      }
+    }
+    if (($attrName eq "movingAverageCount1") || ($attrName eq "movingAverageCount2"))
+    {
+      if ($attrValue < 1)
+      {
+        my $message = "illegal value for movingAverageCount";
         Log3 $name, 3, "EseraCount ($name) - ".$message;
         return $message; 
       }
@@ -300,20 +387,53 @@ EseraCount_Attr($$$$)
   <a name="EseraCount_Attr"></a>
   <b>Attributes</b>
   <ul>
-    <li><code>ticksPerUnit1</code></li>
-    <li><code>ticksPerUnit2</code></li>
+    <li>
+      <code>ticksPerUnit1</code><br>
+      <code>ticksPerUnit2</code><br>
+      These attribute are applied to readings <code>count1</code> / <code>count2</code> and <br>
+      <code>count1Today</code> / <code>count2Today</code>.<br>
+      The default value is 1. The attribute is used to convert the raw<br>
+      tick count to meaningful value with a unit.
+    </li>
+    <li>
+      <code>movingAverageCount1</code><br>
+      <code>movingAverageCount2</code><br>
+      see description of reading <code>count1MovingAverage</code> and <code>count2MovingAverage</code><br>
+      default: 1
+    </li>
+    <li>
+      <code>movingAverageFactor1</code><br>
+      <code>movingAverageFactor2</code><br>
+      see description of reading <code>count1MovingAverage</code> and <code>count2MovingAverage</code><br>
+      default: 1
+    </li>
   </ul>
   <br>
       
   <a name="EseraCount_Readings"></a>
   <b>Readings</b>
   <ul>
-    <ul>
-      <li>count1</li>
-      <li>count2</li>
-      <li>count1Today</li>
-      <li>count2Today</li>
-    </ul>
+    <li>
+      <code>count1</code><br>
+      <code>count2</code><br>
+      The counter values for channel 1 and 2. These are the counter values with<br>
+      attributes <code>ticksPerUnit1</code> and <code>ticksPerUnit2</code> applied.
+    </li>
+    <li>
+      <code>count1Today</code><br>
+      <code>count2Today</code><br>
+      Similar to <code>count1</code> and <code>count2</code> but with a reset at midnight.
+    </li>
+    <li>
+      <code>count1MovingAverage</code><br>
+      <code>count2MovingAverage</code><br>
+      Moving average of the last <code>movingAverageCount1</code> and <code>movingAverageCount2</code>samples, <br>
+      multiplied with <code>movingAverageFactor1</code> or <code>movingAverageFactor2</code>. This reading and <br>
+      the related attributes are used to derive a power value value from the S0 count of an <br>
+      energy meter. Samples must have a fixed and known period. This is the case with the Esera 1-wire<br>
+      controller. When selecting a value for <code>movingAverageFactor1</code> and <code>movingAverageFactor2</code> the sample <br>
+      period has to be considered.<br>
+    </li>
   </ul>
   <br>
 

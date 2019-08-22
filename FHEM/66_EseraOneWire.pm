@@ -535,14 +535,44 @@ EseraOneWire_Set($$)
     }
     return undef;
   }
+  elsif ($what eq "close")
+  {
+    # close connection if open
+    if (DevIo_IsOpen($hash))
+    {
+      DevIo_CloseDev($hash) if (DevIo_IsOpen($hash));
+      
+      RemoveInternalTimer($hash, "EseraOneWire_initTimeoutHandler");
+      RemoveInternalTimer($hash, "EseraOneWire_KalTimeoutHandler");
+
+      EseraOneWire_SetStatus($hash, "disconnected");
+      if (DevIo_IsOpen($hash))
+      {
+        Log3 $name, 1, "EseraOneWire ($name) - set close: failed";
+      }
+      else
+      {
+        Log3 $name, 3, "EseraOneWire ($name) - set close: success";
+      }
+    }
+    else
+    {
+      Log3 $name, 3, "EseraOneWire ($name) - set close: is not open";
+    }
+  }
+  elsif ($what eq "open")
+  {
+    # open connection with custom init and error callback function (non-blocking connection establishment)
+    DevIo_OpenDev($hash, 0, "EseraOneWire_Init", "EseraOneWire_Callback") if(!DevIo_IsOpen($hash));
+  }
   elsif ($what eq "?")
   {
-    my $message = "unknown argument $what, choose one of clearlist:noArg savelist:noArg refresh:noArg reset:controller,tasks raw";
+    my $message = "unknown argument $what, choose one of clearlist:noArg savelist:noArg refresh:noArg reset:controller,tasks raw close:noArg open:noArg";
     return $message;
   }
   else
   {
-    my $message = "unknown argument $what, choose one of clearlist savelist reset refresh raw";
+    my $message = "unknown argument $what, choose one of clearlist savelist reset refresh raw close open";
     Log3 $name, 1, "EseraOneWire ($name) - ".$message;
     return $message;
   }
@@ -2005,6 +2035,14 @@ EseraOneWire_processKalMessage($)
 	<li><code>set myEseraOneWireController raw get,sys,datatime</code></li>
 	<li><code>set myEseraOneWire raw set,sys,datatime,0</code></li>
       </ul>
+    </li>
+    <li>
+      <b><code>set &lt;name&gt; close</code><br></b>
+      Close the TCP/IP connection to the controller.<br>
+    </li>
+    <li>
+      <b><code>set &lt;name&gt; open</code><br></b>
+      Open the TCP/IP connection to the controller.<br>
     </li>
   </ul>
   <br>

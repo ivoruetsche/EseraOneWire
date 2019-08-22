@@ -30,3 +30,6 @@ EseraOneWire last changes:
  - fixes for running multiple controllers at the same time
 2018-10-16
  - ensure default settings with set,sys,loaddefault,1 command
+2019-08-22
+ - added "set open/close" commands to EseraOneWire
+ - added EseraCount readings for count per day and "power"
