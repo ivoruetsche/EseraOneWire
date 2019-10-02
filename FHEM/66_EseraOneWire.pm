@@ -215,6 +215,12 @@ EseraOneWire_baseSettings($)
   my ($hash) = @_;
   my $name = $hash->{NAME};
 
+  if (not DevIo_IsOpen($hash))
+  {
+    Log3 $name, 1, "EseraOneWire ($name) - initialization aborted due to missing connection";
+    return undef;
+  }
+
   EseraOneWire_SetStatus($hash, "initializing");
   $hash->{".READ_PENDING"} = 0;
 
@@ -555,7 +561,7 @@ EseraOneWire_Set($$)
     # close connection if open
     if (DevIo_IsOpen($hash))
     {
-      DevIo_CloseDev($hash) if (DevIo_IsOpen($hash));
+      DevIo_CloseDev($hash);
       
       RemoveInternalTimer($hash, "EseraOneWire_initTimeoutHandler");
       RemoveInternalTimer($hash, "EseraOneWire_KalTimeoutHandler");
@@ -577,6 +583,7 @@ EseraOneWire_Set($$)
   }
   elsif ($what eq "open")
   {
+    Log3 $name, 3, "EseraOneWire ($name) - set open";
     # open connection with custom init and error callback function (non-blocking connection establishment)
     DevIo_OpenDev($hash, 0, "EseraOneWire_Init", "EseraOneWire_Callback") if(!DevIo_IsOpen($hash));
   }
