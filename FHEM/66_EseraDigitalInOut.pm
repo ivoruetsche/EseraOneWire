@@ -31,7 +31,7 @@ use strict;
 use warnings;
 use SetExtensions;
 
-my %deviceSpecs = ("DS2408" => 8, "11229" => 8, "11216" => 8, "SYS1" => 4, "SYS2" => 5);
+my %deviceSpecs = ("DS2408" => 8, "11220" => 8, "11228" => 8, "11229" => 8, "11216" => 8, "SYS1" => 4, "SYS2" => 5);
 
 sub 
 EseraDigitalInOut_Initialize($) 
@@ -328,6 +328,8 @@ EseraDigitalInOut_setOutput($$$$)
   } 
   
   if (($hash->{DEVICE_TYPE} eq "DS2408") || 
+      ($hash->{DEVICE_TYPE} eq "11220") ||
+      ($hash->{DEVICE_TYPE} eq "11228") ||
       ($hash->{DEVICE_TYPE} eq "11229"))
   {
     my ($adjustedMask, $adjustedValue) = EseraDigitalInOut_calculateBitMasksForSet($hash, $mask, $value);
@@ -499,7 +501,7 @@ EseraDigitalInOut_ParseForOneDevice($$$$$$)
         readingsSingleUpdate($rhash, $nameOfReading, $readingValue, 1);
       }
     }
-    elsif ($deviceType eq "11229")  # 8 channel digital output
+    elsif (($deviceType eq "11220") || ($deviceType eq "11228") || ($deviceType eq "11229")) # 8 channel digital output
     {
       if ($readingId == 4)
       {
@@ -631,6 +633,7 @@ EseraDigitalInOut_Attr(@)
     Supported values for deviceType:
     <ul> 
       <li>DS2408</li>
+      <li>11220/11228 (Esera "Digital Out 8-Channel with push-button interface")</li> 
       <li>11229 (Esera "Digital Out 8-Channel")</li> 
       <li>11216 (Esera "8-Channel Digital Input DC")</li>
       <li>SYS1 (Esera Controller 2, digital input, not listed by "get devices")</li>

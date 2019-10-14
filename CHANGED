@@ -1,4 +1,6 @@
 EseraOneWire last changes:
+2019-10-14
+ - added support for digital output with push-buttons, Esera 11220, 11228
 2019-10-02
  - changed logging related to connect/disconnect
 2019-08-25
