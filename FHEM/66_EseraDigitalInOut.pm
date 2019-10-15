@@ -593,7 +593,10 @@ EseraDigitalInOut_Parse($$)
   {
     return @list;
   }
-  elsif (($deviceType eq "DS2408") or ($deviceType eq "SYS1") or ($deviceType eq "SYS2"))
+  elsif (($deviceType eq "DS2408") or ($deviceType eq "11216") or
+         ($deviceType eq "11220") or  
+         ($deviceType eq "11228") or ($deviceType eq "11229") or
+         ($deviceType eq "SYS1") or ($deviceType eq "SYS2"))
   {
     return "UNDEFINED EseraDigitalInOut_".$ioName."_".$oneWireId." EseraDigitalInOut ".$ioName." ".$oneWireId." ".$deviceType." - -";
   }

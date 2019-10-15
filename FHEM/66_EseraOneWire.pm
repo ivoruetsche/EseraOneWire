@@ -77,9 +77,9 @@ EseraOneWire_Initialize($)
   $hash->{AttrList} = $readingFnAttributes;
 
   $hash->{Clients} = ":EseraDigitalInOut:EseraTemp:EseraMulti:EseraAnalogInOut:EseraIButton:EseraCount:";
-  $hash->{MatchList} = { "1:EseraDigitalInOut" => "^(DS2408|11220|11228|11229|11216|SYS1|SYS2)",
+  $hash->{MatchList} = { "1:EseraDigitalInOut" => "^DS2408|^11220|^11228|^11229|^11216|^SYS1|^SYS2",
                          "2:EseraTemp" => "^DS1820",
-                         "3:EseraMulti" => "^(DS2438|11132|11134)" ,
+                         "3:EseraMulti" => "^DS2438|^11132|^11134",
                          "4:EseraAnalogInOut" => "^SYS3",
                          "5:EseraIButton" => "^DS2401",
 			 "6:EseraCount" => "^DS2423"};
