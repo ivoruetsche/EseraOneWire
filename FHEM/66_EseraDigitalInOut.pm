@@ -501,7 +501,22 @@ EseraDigitalInOut_ParseForOneDevice($$$$$$)
         readingsSingleUpdate($rhash, $nameOfReading, $readingValue, 1);
       }
     }
-    elsif (($deviceType eq "11220") || ($deviceType eq "11228") || ($deviceType eq "11229")) # 8 channel digital output
+    elsif (($deviceType eq "11220") || ($deviceType eq "11228")) # 8 channel digital output with push buttons
+    {
+      if ($readingId == 2)
+      {
+        $nameOfReading = "in";
+        my $readingValue = EseraDigitalInOut_getReadingValue($value, $rhash->{BITPOS}, $rhash->{BITCOUNT});
+        readingsSingleUpdate($rhash, $nameOfReading, $readingValue, 1);
+      }
+      if ($readingId == 4)
+      {
+        $nameOfReading = "out";
+        my $readingValue = EseraDigitalInOut_getReadingValue($value, $rhash->{BITPOS}, $rhash->{BITCOUNT});
+        readingsSingleUpdate($rhash, $nameOfReading, $readingValue, 1);
+      }
+    }      
+    elsif ($deviceType eq "11229") # 8 channel digital output
     {
       if ($readingId == 4)
       {
