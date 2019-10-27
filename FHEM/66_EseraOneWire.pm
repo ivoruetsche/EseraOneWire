@@ -2067,6 +2067,7 @@ EseraOneWire_processKalMessage($)
 =item summary    Provides an interface between FHEM and Esera 1-wire controllers.
 =item summary_DE Stellt eine Verbindung zwischen FHEM und den Esera 1-wire Controllern zur Verfuegung.
 =begin html
+
 <a name="EseraOneWire"></a>
 <h3>EseraOneWire</h3>
 <ul>
