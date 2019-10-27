@@ -1,4 +1,6 @@
 EseraOneWire last changes:
+2019-10-27
+ - added attributes pollTime and dataTime to EseraOneWire
 2019-10-17
  - added reading "in" for Esera 11220/11228 digital output with push buttons
 2019-10-15

@@ -75,6 +75,10 @@ EseraOneWire_Initialize($)
   $hash->{SetFn} = "EseraOneWire_Set";
   $hash->{AttrFn} = "EseraOneWire_Attr";
   $hash->{AttrList} = $readingFnAttributes;
+  $hash->{AttrList} = "pollTime ".
+                      "dataTime ".
+                      $readingFnAttributes;
+
 
   $hash->{Clients} = ":EseraDigitalInOut:EseraTemp:EseraMulti:EseraAnalogInOut:EseraIButton:EseraCount:";
   $hash->{MatchList} = { "1:EseraDigitalInOut" => "^DS2408|^11220|^11228|^11229|^11216|^SYS1|^SYS2",
@@ -117,6 +121,8 @@ EseraOneWire_Define($$)
 
   $hash->{KAL_PERIOD} = 60;
   $hash->{RECOMMENDED_FW} = 12027;
+  $hash->{DEFAULT_POLLTIME} = 5;
+  $hash->{DEFAULT_DATATIME} = 10;
 
   # close connection if maybe open (on definition modify)
   DevIo_CloseDev($hash) if(DevIo_IsOpen($hash));
@@ -167,6 +173,77 @@ EseraOneWire_Attr($$$$)
   # $cmd  -  "del" or "set"
   # $name - device name
   # $attrName/$attrValue
+  my $hash = $defs{$name};
+
+  if ($attrName eq "pollTime")
+  {
+    if ($cmd eq "set")
+    {
+      if (not ($attrValue =~ m/^[0-9]+$/))
+      {
+        my $message = "illegal value for pollTime, not an integer number";
+        Log3 $name, 3, "EseraOneWire ($name) - ".$message;
+        return $message;
+      }
+
+      if (($attrValue < 1) or ($attrValue > 240))
+      {
+        my $message = "illegal value for pollTime, out of range";
+        Log3 $name, 3, "EseraOneWire ($name) - ".$message;
+        return $message;
+      }
+
+      if ($attrValue >= AttrVal($name, "dataTime", $hash->{DEFAULT_DATATIME}))
+      {
+        my $message = "illegal value for pollTime, compared to dataTime";
+        Log3 $name, 3, "EseraOneWire ($name) - ".$message;
+        return $message;
+      }
+
+      Log3 $name, 3, "EseraOneWire ($name) - attribute pollTime = $attrValue, re-initializing the controller";
+      InternalTimer(gettimeofday()+1, "EseraOneWire_baseSettings", $hash);
+    }
+    if ($cmd eq "del")
+    {
+      Log3 $name, 3, "EseraOneWire ($name) - attribute pollTime deleted, re-initializing the controller";
+      InternalTimer(gettimeofday()+1, "EseraOneWire_baseSettings", $hash);
+    }
+  }
+
+  if ($attrName eq "dataTime")
+  {
+    if ($cmd eq "set")
+    {
+      if (not ($attrValue =~ m/^[0-9]+$/))
+      {
+        my $message = "illegal value for dataTime, not an integer number";
+        Log3 $name, 3, "EseraOneWire ($name) - ".$message;
+        return $message;
+      }
+      if (($attrValue < 10) or ($attrValue > 240))
+      {
+        my $message = "illegal value for dataTime, out of range";
+        Log3 $name, 3, "EseraOneWire ($name) - ".$message;
+        return $message;
+      }
+      if ($attrValue <= AttrVal($name, "pollTime", $hash->{DEFAULT_POLLTIME}))
+      {
+        my $message = "illegal value for dataTime, compared to pollTime";
+        Log3 $name, 3, "EseraOneWire ($name) - ".$message;
+        return $message;
+      }
+
+      Log3 $name, 3, "EseraOneWire ($name) - attribute dataTime = $attrValue, re-initializing the controller";
+
+      InternalTimer(gettimeofday()+1, "EseraOneWire_baseSettings", $hash);
+    }
+    if ($cmd eq "del")
+    {
+      Log3 $name, 3, "EseraOneWire ($name) - attribute dataTime deleted, re-initializing the controller";
+      InternalTimer(gettimeofday()+1, "EseraOneWire_baseSettings", $hash);
+    }
+  }
+
   return undef;
 }
 
@@ -253,7 +330,7 @@ EseraOneWire_baseSettings($)
 
   # get iButton events for connect and disconnect
   EseraOneWire_taskListAddSimple($hash, "set,key,data,2", "1_DATA", \&EseraOneWire_query_response_handler);
-  
+
   # Due to a bug in FW version 12027 there is no response to this command if the license is not available.
   # Therefore, do a posted write only.
   # EseraOneWire_taskListAddSimple($hash, "set,key,fast,1", "1_FAST", \&EseraOneWire_query_response_handler);
@@ -269,7 +346,12 @@ EseraOneWire_baseSettings($)
   EseraOneWire_taskListAddSimple($hash, "set,sys,kalrec,0", "1_KALREC", \&EseraOneWire_query_response_handler);
   EseraOneWire_taskListAddSimple($hash, "set,owb,search,2", "1_SEARCH", \&EseraOneWire_query_response_handler);
   EseraOneWire_taskListAddSimple($hash, "set,owb,searchtime,30", "1_SEARCHTIME", \&EseraOneWire_query_response_handler);
-  EseraOneWire_taskListAddSimple($hash, "set,owb,polltime,5", "1_POLLTIME", \&EseraOneWire_query_response_handler);
+
+  # settings from attributes
+  my $dataTime = AttrVal($name, "dataTime", $hash->{DEFAULT_DATATIME});
+  EseraOneWire_taskListAddSimple($hash, "set,sys,datatime,$dataTime", "1_DATATIME", \&EseraOneWire_query_response_handler);
+  my $pollTime = AttrVal($name, "pollTime", $hash->{DEFAULT_POLLTIME});
+  EseraOneWire_taskListAddSimple($hash, "set,owb,polltime,$pollTime", "1_POLLTIME", \&EseraOneWire_query_response_handler);
 
   # wait some time to give the controller time to detect the devices
   EseraOneWire_taskListAddPostedWrite($hash, "", 4);
@@ -562,7 +644,7 @@ EseraOneWire_Set($$)
     if (DevIo_IsOpen($hash))
     {
       DevIo_CloseDev($hash);
-      
+
       RemoveInternalTimer($hash, "EseraOneWire_initTimeoutHandler");
       RemoveInternalTimer($hash, "EseraOneWire_KalTimeoutHandler");
 
@@ -1356,7 +1438,7 @@ EseraOneWire_fw_handler($$)
     my $key = ".".$1;
     my $value = $fields[1];
     $hash->{$key} = $value;
-    
+
     if ($value != $hash->{RECOMMENDED_FW})
     {
       Log3 $name, 1, "EseraOneWire ($name) - warning: actual FW version is $value, recommended FW version is ".$hash->{RECOMMENDED_FW};
@@ -1985,10 +2067,8 @@ EseraOneWire_processKalMessage($)
 =item summary    Provides an interface between FHEM and Esera 1-wire controllers.
 =item summary_DE Stellt eine Verbindung zwischen FHEM und den Esera 1-wire Controllern zur Verfuegung.
 =begin html
-
 <a name="EseraOneWire"></a>
 <h3>EseraOneWire</h3>
-
 <ul>
   This module provides an interface to Esera 1-wire controllers.<br>
   The module works in conjunction with 66_Esera* modules which support <br>
@@ -2003,7 +2083,6 @@ EseraOneWire_processKalMessage($)
   <br>
   Tested with Esera controller firmware version 12027.<br>
   <br>
-
   <a name="EseraOneWire_Define"></a>
   <b>Define</b>
   <ul>
@@ -2012,7 +2091,6 @@ EseraOneWire_processKalMessage($)
     Example: <code>define myEseraOneWireController EseraOneWire /dev/ttyUSB0</code><br>
   </ul>
   <br>
-
   <a name="EseraOneWire_Set"></a>
   <b>Set</b>
   <ul>
@@ -2068,7 +2146,6 @@ EseraOneWire_processKalMessage($)
     </li>
   </ul>
   <br>
-
   <a name="EseraOneWire_Get"></a>
   <b>Get</b>
   <ul>
@@ -2105,7 +2182,6 @@ EseraOneWire_processKalMessage($)
     </li>
   </ul>
   <br>
-
   <a name="EseraDigitalInOut_Readings"></a>
   <b>Readings</b>
   <ul>
@@ -2121,7 +2197,13 @@ EseraOneWire_processKalMessage($)
     </li>
   </ul>
   <br>
-
+  <a name="EseraDigitalInOut_Attributes"></a>
+  <b>Attributes</b>
+  <ul>
+    <li>pollTime &ndash; POLLTIME setting of the controller, see controller manual, default: 5</li>
+    <li>dataTime &ndash; DATATIME setting of the controller, see controller manual, default: 10</li>
+  </ul>
+  <br>
   <a name="EseraDigitalInOut_Events"></a>
   <b>Events</b>
   <ul>
@@ -2131,8 +2213,6 @@ EseraOneWire_processKalMessage($)
     <li><code>READY</code> &ndash; fully functional</li>
   </ul>
   <br>
-
 </ul>
-
 =end html
 =cut
