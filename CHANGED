@@ -1,4 +1,6 @@
 EseraOneWire last changes:
+2019-11-13
+ - added support for Esera multi sensors 11121 and 11135
 2019-10-27
  - fixed missing empty line in commandref
 2019-10-27

@@ -219,7 +219,7 @@ EseraMulti_Parse($$)
           readingsSingleUpdate($rhash, $nameOfReading, $value / 100000.0, 1);
         }
       }
-      elsif (($deviceType eq "11132") || ($deviceType eq "11134"))
+      elsif (($deviceType eq "11121") || ($deviceType eq "11132") || ($deviceType eq "11134") || ($deviceType eq "11135"))
       {
         if ($readingId == 1) 
         {
@@ -253,7 +253,7 @@ EseraMulti_Parse($$)
     push(@list, $rname);
     return @list;
   }
-  elsif (($deviceType eq "DS2438") || ($deviceType eq "11132") || ($deviceType eq "11134"))
+  elsif (($deviceType eq "DS2438") || ($deviceType eq "11121") || ($deviceType eq "11132") || ($deviceType eq "11134") || ($deviceType eq "11135"))
   {
     return "UNDEFINED EseraMulti_".$ioName."_".$oneWireId." EseraMulti ".$ioName." ".$oneWireId." ".$deviceType;
   }
@@ -290,13 +290,15 @@ EseraMulti_Attr(@)
     Supported values for deviceType: 
     <ul>
       <li>DS2438</li>
+      <li>11121 (Esera product number)</li>
       <li>11132 (Esera product number, multi sensor Unterputz)</li>
       <li>11134 (Esera product number, multi sensor Aufputz)</li>
+      <li>11135 (Esera product number, multi sensor Outdoor)</li>
     </ul>
     With deviceType DS2438 this device generates readings with un-interpreted data<br>
     from DS2438. This can be used with any DS2438 device, independent of an Esera <br>
-    product. With deviceType 11132/11134 this module provides interpreted readings like <br>
-    humidity or dew point.<br>
+    product. With deviceType 11121/11132/11134/11135 this module provides interpreted<br>
+    readings like humidity or dew point.<br>
   </ul>
   
   <a name="EseraMulti_Set"></a>
@@ -330,7 +332,7 @@ EseraMulti_Attr(@)
       <li>VSense</li>
       <li>temperature</li>
     </ul>
-    readings for Esera 11132/11134:<br>
+    readings for Esera 11121/11132/11134/11135:<br>
     <ul>
       <li>temperature</li>
       <li>humidity</li>
