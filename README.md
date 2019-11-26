@@ -1,4 +1,14 @@
 # EseraOneWire
+
+UPDATE 26-Nov-2019: The EseraOneWire modules are now part of the standard FHEM installation, see
+https://fhem.de/commandref.html#EseraOneWire . 
+If you are using FHEM "update" to get the modules from here you should stop doing this:
+"update delete https://raw.githubusercontent.com/pizmus/EseraOneWire/master/controls_EseraOneWire.txt". 
+From now on the module is not maintained in github, and after some time it will not be possible anymore to install it from here.
+
+
+
+
 Family of FHEM modules to support the Esera 1-wire controller and various sensors and actors.
 
 # Installation
